@@ -23,6 +23,14 @@ La sicurezza è il requisito principale: le misure adottate sono descritte in [`
   - *Responsabile vendite*: vede tutto il team, riassegna i record, elimina.
   - *Amministratore*: in più gestisce utenti, fasi della pipeline e registro di audit.
 
+## Avvio rapido su Windows
+
+1. Installa [Laravel Herd](https://herd.laravel.com/windows), che include PHP e Composer, e [Node.js LTS](https://nodejs.org).
+2. Scarica il progetto ed estrai lo ZIP in una cartella.
+3. Fai doppio clic su **`avvia-crm.bat`**. La prima volta installa tutto (qualche minuto), poi apre il CRM su http://localhost:5173.
+
+Lascia aperte le due finestre nere dei server finché usi il CRM: chiudendole il CRM si spegne.
+
 ## Sviluppo in locale
 
 Requisiti: PHP 8.4 + Composer, Node.js 20+.
