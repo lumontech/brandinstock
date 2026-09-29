@@ -48,8 +48,9 @@ const FIELDS: Field[] = [
   { key: 'contact_email', label: 'Referente: email', group: 'referente', aliases: ['email referente', 'email contatto', 'contact email'] },
   { key: 'contact_phone', label: 'Referente: telefono', group: 'referente', aliases: ['telefono referente', 'cellulare referente', 'contact phone'] },
 ]
-const fields = computed(() => FIELDS.filter((f) => !f.managersOnly || auth.seesEverything))
-const groupOrder: Field['group'][] = props.status === 'customer' ? ['cliente', 'fatturazione', 'referente'] : ['cliente', 'referente', 'fatturazione']
+// Per i leads solo i dati principali: referenti e fatturazione servono solo ai clienti.
+const fields = computed(() => FIELDS.filter((f) => (!f.managersOnly || auth.seesEverything) && (props.status === 'customer' || f.group === 'cliente')))
+const groupOrder: Field['group'][] = props.status === 'customer' ? ['cliente', 'fatturazione', 'referente'] : ['cliente']
 
 type Step = 'file' | 'map' | 'done'
 const step = ref<Step>('file')

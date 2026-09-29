@@ -5,6 +5,7 @@ namespace Tests\Feature;
 use App\Models\Company;
 use App\Models\Contact;
 use App\Models\User;
+use Illuminate\Support\Facades\DB;
 use Tests\TestCase;
 
 class CompanyImportTest extends TestCase
@@ -177,5 +178,19 @@ class CompanyImportTest extends TestCase
         $this->assertSame('IT60X0542811101000000123456', $c->iban);
         $this->assertTrue($c->hasCompleteBilling());
         $this->assertSame('lead', Company::factory()->create()->status);
+    }
+
+    public function test_database_errors_are_reported_with_their_code(): void
+    {
+        $user = User::factory()->create();
+        // Provincia oltre i 10 caratteri: la validazione la blocca, ma forziamo il caso a livello database.
+        DB::statement('CREATE UNIQUE INDEX tmp_unique_city ON companies (city)');
+        $rows = [['name' => 'Uno', 'city' => 'Roma'], ['name' => 'Due', 'city' => 'Roma']];
+
+        $response = $this->actingAs($user)->postJson('/api/companies/import', ['rows' => $rows, 'duplicates' => 'skip'])
+            ->assertOk()->assertJson(['created' => 1])->assertJsonCount(1, 'errors');
+
+        $this->assertStringContainsString('esiste già un record con lo stesso valore', $response->json('errors.0.messages.0'));
+        $this->assertStringContainsString('codice 23', $response->json('errors.0.messages.0'));
     }
 }

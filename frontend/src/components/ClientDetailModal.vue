@@ -50,7 +50,7 @@ async function setStatus(status: 'lead' | 'customer') {
     confirmStatus.value = false
     await load()
     emit('changed')
-    if (status === 'customer') tab.value = 'billing'
+    tab.value = status === 'customer' ? 'billing' : 'details'
   } catch (e) {
     error.value = errorMessage(e)
   }
@@ -103,16 +103,16 @@ onMounted(load)
       <div class="figures">
         <div><span class="muted small">Pipeline aperta</span><strong>{{ money(openValue) }}</strong><span class="muted small">{{ openDeals.length }} opportunità</span></div>
         <div><span class="muted small">Vinto</span><strong>{{ money(wonValue) }}</strong></div>
-        <div><span class="muted small">Referenti</span><strong>{{ company.contacts?.length ?? 0 }}</strong></div>
+        <div v-if="company.status === 'customer'"><span class="muted small">Referenti</span><strong>{{ company.contacts?.length ?? 0 }}</strong></div>
         <div><span class="muted small">Attività</span><strong>{{ company.activities?.length ?? 0 }}</strong></div>
       </div>
 
       <nav class="tabs" aria-label="Sezioni">
         <button class="tab" :class="{ active: tab === 'details' }" @click="tab = 'details'">Anagrafica</button>
-        <button class="tab" :class="{ active: tab === 'billing' }" @click="tab = 'billing'">
+        <button v-if="company.status === 'customer'" class="tab" :class="{ active: tab === 'billing' }" @click="tab = 'billing'">
           Fatturazione <span v-if="company.status === 'customer'" class="dot" :class="company.billing_complete ? 'ok' : 'missing'" />
         </button>
-        <button class="tab" :class="{ active: tab === 'contacts' }" @click="tab = 'contacts'">Referenti ({{ company.contacts?.length ?? 0 }})</button>
+        <button v-if="company.status === 'customer'" class="tab" :class="{ active: tab === 'contacts' }" @click="tab = 'contacts'">Referenti ({{ company.contacts?.length ?? 0 }})</button>
         <button class="tab" :class="{ active: tab === 'deals' }" @click="tab = 'deals'">Opportunità ({{ company.deals?.length ?? 0 }})</button>
         <button class="tab" :class="{ active: tab === 'activities' }" @click="tab = 'activities'">Attività</button>
       </nav>

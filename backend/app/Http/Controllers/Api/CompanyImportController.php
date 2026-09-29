@@ -58,7 +58,7 @@ class CompanyImportController extends Controller
                     $outcome = DB::transaction(fn () => $this->importRow($row, $user, $owners, $payload['duplicates'], $payload['status'] ?? 'lead'));
                 } catch (QueryException $e) {
                     report($e);
-                    $outcome = ['error' => 'Dato non accettato dal database (valore troppo lungo o duplicato).'];
+                    $outcome = ['error' => $this->describeDatabaseError($e)];
                 }
 
                 if (isset($outcome['error'])) {
@@ -82,6 +82,26 @@ class CompanyImportController extends Controller
         }
 
         return response()->json([...$result, 'dry_run' => $dryRun]);
+    }
+
+    /**
+     * Motivo leggibile dell'errore del database, con il codice SQLSTATE per l'assistenza.
+     * Si usa solo la prima riga del messaggio (senza il DETAIL, che può contenere i dati).
+     */
+    private function describeDatabaseError(QueryException $e): string
+    {
+        $state = (string) ($e->errorInfo[0] ?? $e->getCode());
+        $message = Str::of((string) ($e->errorInfo[2] ?? ''))->before("\n")->after('ERROR:')->trim()->limit(160)->value();
+        $reason = match ($state) {
+            '23505', '23000' => 'esiste già un record con lo stesso valore',
+            '22001' => 'un valore è troppo lungo',
+            '23502' => 'manca un valore obbligatorio',
+            '42501' => 'permesso negato dal database',
+            '42703', '42P01' => 'la struttura del database non è aggiornata',
+            default => 'dato non accettato dal database',
+        };
+
+        return "Riga non salvata: {$reason} (codice {$state}".($message !== '' ? ": {$message}" : '').').';
     }
 
     /** @return array{status?: string, contact?: bool, error?: string} */

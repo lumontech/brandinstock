@@ -81,7 +81,7 @@ onMounted(load)
           </dl>
         </div>
 
-        <div class="card">
+        <div v-if="company.status === 'customer'" class="card">
           <div class="page-header" style="margin-bottom: 8px">
             <h2 style="margin: 0">Fatturazione</h2>
             <span class="toolbar">
@@ -99,7 +99,7 @@ onMounted(load)
           </dl>
         </div>
 
-        <div class="card">
+        <div v-if="company.status === 'customer'" class="card">
           <div class="page-header" style="margin-bottom: 8px">
             <h2 style="margin: 0">Referenti</h2>
             <button class="btn btn-sm" @click="contactModal = { contact: null }">+ Referente</button>

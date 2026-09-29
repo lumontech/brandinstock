@@ -29,12 +29,14 @@ interface Column {
   align?: 'right'
   /** In quale vista la colonna è visibile di default. */
   show: ('lead' | 'customer')[]
+  /** Colonna disponibile solo per i clienti (fatturazione, referenti, vinto). */
+  customerOnly?: boolean
 }
 
 const L = ['lead'] as ('lead' | 'customer')[]
 const C = ['customer'] as ('lead' | 'customer')[]
 const LC = ['lead', 'customer'] as ('lead' | 'customer')[]
-const COLUMNS: Column[] = [
+const ALL_COLUMNS: Column[] = [
   { key: 'name', label: isCustomers ? 'Cliente' : 'Lead', width: 240, sort: 'name', editor: 'text', show: LC },
   { key: 'segment', label: 'Categoria', width: 120, sort: 'segment', editor: 'segment', show: LC },
   { key: 'source', label: 'Provenienza', width: 170, sort: 'source', editor: 'source', show: L },
@@ -43,23 +45,25 @@ const COLUMNS: Column[] = [
   { key: 'type', label: 'Tipologia', width: 130, sort: 'type', editor: 'type', show: L },
   { key: 'city', label: 'Città', width: 140, sort: 'city', editor: 'text', show: L },
   { key: 'vat_number', label: 'Partita IVA', width: 150, sort: 'vat_number', editor: 'text', show: C },
-  { key: 'billing_complete', label: 'Fatturazione', width: 120, show: C },
-  { key: 'sdi_code', label: 'Codice SDI', width: 110, sort: 'sdi_code', editor: 'text', show: C },
-  { key: 'pec', label: 'PEC', width: 200, editor: 'email', show: [] },
-  { key: 'billing_city', label: 'Sede (città)', width: 140, sort: 'billing_city', editor: 'text', show: C },
-  { key: 'payment_terms', label: 'Pagamento', width: 190, sort: 'payment_terms', editor: 'text', show: C },
+  { key: 'billing_complete', label: 'Fatturazione', width: 120, show: C, customerOnly: true },
+  { key: 'sdi_code', label: 'Codice SDI', width: 110, sort: 'sdi_code', editor: 'text', show: C, customerOnly: true },
+  { key: 'pec', label: 'PEC', width: 200, editor: 'email', show: [], customerOnly: true },
+  { key: 'billing_city', label: 'Sede (città)', width: 140, sort: 'billing_city', editor: 'text', show: C, customerOnly: true },
+  { key: 'payment_terms', label: 'Pagamento', width: 190, sort: 'payment_terms', editor: 'text', show: C, customerOnly: true },
   { key: 'province', label: 'Prov.', width: 70, sort: 'province', editor: 'text', show: [] },
   { key: 'tax_code', label: 'Codice fiscale', width: 170, editor: 'text', show: [] },
   { key: 'website', label: 'Sito web', width: 190, editor: 'url', show: [] },
   { key: 'owner', label: 'Venditore', width: 150, sort: 'owner', editor: 'owner', show: LC },
-  { key: 'contacts_count', label: 'Referenti', width: 95, sort: 'contacts_count', align: 'right', show: [] },
+  { key: 'contacts_count', label: 'Referenti', width: 95, sort: 'contacts_count', align: 'right', show: [], customerOnly: true },
   { key: 'deals_count', label: 'Opportunità', width: 110, sort: 'deals_count', align: 'right', show: L },
   { key: 'open_deals_value', label: 'Valore aperto', width: 130, sort: 'open_deals_value', align: 'right', show: LC },
-  { key: 'won_value', label: 'Vinto', width: 120, sort: 'won_value', align: 'right', show: C },
+  { key: 'won_value', label: 'Vinto', width: 120, sort: 'won_value', align: 'right', show: C, customerOnly: true },
   { key: 'last_activity_at', label: 'Ultima attività', width: 130, sort: 'last_activity_at', show: L },
-  { key: 'converted_at', label: 'Cliente dal', width: 120, sort: 'converted_at', show: C },
+  { key: 'converted_at', label: 'Cliente dal', width: 120, sort: 'converted_at', show: C, customerOnly: true },
   { key: 'created_at', label: 'Inserito il', width: 120, sort: 'created_at', show: [] },
 ]
+
+const COLUMNS = ALL_COLUMNS.filter((c) => isCustomers || !c.customerOnly)
 
 const GROUPS = { none: 'Nessuno', segment: 'Categoria', source: 'Provenienza', type: 'Tipologia', owner: 'Venditore', city: 'Città', billing: 'Dati di fatturazione' } as const
 type GroupBy = keyof typeof GROUPS
@@ -344,7 +348,9 @@ const isEditing = (row: Company, col: Column) => editing.value?.id === row.id &&
       <label class="group-by">
         Raggruppa
         <select v-model="groupBy" class="input narrow" aria-label="Raggruppa per">
-          <option v-for="(label, key) in GROUPS" :key="key" :value="key">{{ label }}</option>
+          <template v-for="(label, key) in GROUPS" :key="key">
+            <option v-if="isCustomers || key !== 'billing'" :value="key">{{ label }}</option>
+          </template>
         </select>
       </label>
       <div class="fields">
