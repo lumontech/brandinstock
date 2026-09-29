@@ -150,7 +150,7 @@ Una volta sola, sulla VPS:
 cd /opt/brandinstock-crm && git pull && ./deploy/enable-auto-update.sh
 ```
 
-Da quel momento un timer di systemd esegue `deploy/update.sh` ogni 15 minuti. Lo script:
+Da quel momento un timer di systemd esegue `deploy/update.sh` ogni 2 minuti. Lo script:
 - se su GitHub non c'è nulla di nuovo, esce senza fare niente;
 - se c'è una nuova versione, fa un backup, compila, aggiorna il database, riavvia solo i container del CRM e verifica che il sito risponda;
 - non avvia mai due aggiornamenti insieme; se un passaggio fallisce, lascia in funzione la versione precedente.

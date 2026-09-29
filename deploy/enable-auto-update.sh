@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-# Attiva l'aggiornamento automatico di Brandinstock CRM: ogni 15 minuti la VPS controlla
+# Attiva l'aggiornamento automatico di Brandinstock CRM: ogni 2 minuti la VPS controlla
 # GitHub e, se c'è una nuova versione, esegue deploy/update.sh (backup, build, migrate, riavvio).
 #
 # Uso (come root sulla VPS, una volta sola):  /opt/brandinstock-crm/deploy/enable-auto-update.sh
@@ -25,11 +25,11 @@ UNIT
 
 cat > /etc/systemd/system/brandinstock-crm-update.timer <<UNIT
 [Unit]
-Description=Controlla ogni 15 minuti se c'è una nuova versione di Brandinstock CRM
+Description=Controlla ogni 2 minuti se c'è una nuova versione di Brandinstock CRM
 
 [Timer]
-OnCalendar=*:0/15
-RandomizedDelaySec=60
+OnBootSec=2min
+OnUnitActiveSec=2min
 Persistent=true
 
 [Install]
@@ -42,6 +42,6 @@ echo "==> Primo aggiornamento (subito, così vedi il risultato)"
 systemctl daemon-reload
 systemctl enable --now brandinstock-crm-update.timer >/dev/null
 echo
-echo "✓ Aggiornamento automatico attivo: la VPS controlla GitHub ogni 15 minuti."
+echo "✓ Aggiornamento automatico attivo: la VPS controlla GitHub ogni 2 minuti."
 echo "  Prossimo controllo: $(systemctl list-timers brandinstock-crm-update.timer --no-legend | awk '{print $1, $2, $3}')"
 echo "  Storico degli aggiornamenti:  journalctl -u brandinstock-crm-update -n 100"
