@@ -6,6 +6,8 @@ use App\Http\Controllers\Api\Concerns\ResolvesOwner;
 use App\Http\Controllers\Controller;
 use App\Http\Resources\CompanyResource;
 use App\Models\Company;
+use App\Models\PipelineStage;
+use App\Models\User;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
 use Illuminate\Http\Resources\Json\AnonymousResourceCollection;
@@ -16,26 +18,49 @@ class CompanyController extends Controller
 {
     use ResolvesOwner;
 
+    /** Colonne ordinabili della vista a griglia (whitelist: mai ordinare su input libero). */
+    private const SORTABLE = ['name', 'segment', 'type', 'city', 'province', 'vat_number', 'created_at', 'deals_count', 'contacts_count', 'open_deals_value', 'last_activity_at', 'owner'];
+
     public function index(Request $request): AnonymousResourceCollection
     {
         $filters = $request->validate([
             'q' => ['nullable', 'string', 'max:100'],
+            'segment' => ['nullable', Rule::in(Company::SEGMENTS)],
             'type' => ['nullable', Rule::in(Company::TYPES)],
             'owner_id' => ['nullable', 'integer'],
+            'sort' => ['nullable', Rule::in(self::SORTABLE)],
+            'direction' => ['nullable', Rule::in(['asc', 'desc'])],
+            'per_page' => ['nullable', 'integer', 'min:10', 'max:200'],
         ]);
+        $user = $request->user();
+        $openStageIds = PipelineStage::where('is_won', false)->where('is_lost', false)->pluck('id');
+        $sort = $filters['sort'] ?? 'name';
+        $direction = $filters['direction'] ?? 'asc';
 
         $companies = Company::query()
-            ->visibleTo($request->user())
+            ->visibleTo($user)
             ->with('owner')
-            ->withCount('deals')
+            // I conteggi rispettano i permessi: un venditore non vede i numeri dei colleghi.
+            ->withCount([
+                'deals' => fn ($q) => $q->visibleTo($user),
+                'contacts' => fn ($q) => $q->visibleTo($user),
+            ])
+            ->withSum(['deals as open_deals_value' => fn ($q) => $q->visibleTo($user)->whereIn('pipeline_stage_id', $openStageIds)], 'value')
+            ->withMax(['activities as last_activity_at' => fn ($q) => $q->visibleTo($user)], 'created_at')
             ->when($filters['q'] ?? null, fn ($q, $term) => $q->where(fn ($w) => $w
                 ->whereLike('name', "%{$term}%")
                 ->orWhereLike('vat_number', "%{$term}%")
                 ->orWhereLike('city', "%{$term}%")))
+            ->when($filters['segment'] ?? null, fn ($q, $segment) => $q->where('segment', $segment))
             ->when($filters['type'] ?? null, fn ($q, $type) => $q->where('type', $type))
             ->when($filters['owner_id'] ?? null, fn ($q, $owner) => $q->where('owner_id', $owner))
-            ->orderBy('name')
-            ->paginate(25);
+            ->when(
+                $sort === 'owner',
+                fn ($q) => $q->orderBy(User::select('name')->whereColumn('users.id', 'companies.owner_id'), $direction),
+                fn ($q) => $q->orderBy($sort, $direction),
+            )
+            ->orderBy('companies.id')
+            ->paginate($filters['per_page'] ?? 25);
 
         return CompanyResource::collection($companies);
     }
@@ -89,7 +114,9 @@ class CompanyController extends Controller
     {
         return $request->validate([
             'name' => [$company ? 'sometimes' : 'required', 'string', 'max:255'],
+            'segment' => ['sometimes', Rule::in(Company::SEGMENTS)],
             'vat_number' => ['nullable', 'string', 'max:32', Rule::unique('companies')->ignore($company)],
+            'tax_code' => ['nullable', 'string', 'regex:/^[A-Za-z0-9]{11,16}$/'],
             'type' => ['nullable', Rule::in(Company::TYPES)],
             'city' => ['nullable', 'string', 'max:100'],
             'province' => ['nullable', 'string', 'max:10'],
@@ -99,6 +126,9 @@ class CompanyController extends Controller
             'phone' => ['nullable', 'string', 'max:40'],
             'website' => ['nullable', 'url:http,https', 'max:255'],
             'notes' => ['nullable', 'string', 'max:5000'],
-        ], ['vat_number.unique' => 'Questa partita IVA è già presente nel CRM: contatta un responsabile.']);
+        ], [
+            'vat_number.unique' => 'Questa partita IVA è già presente nel CRM: contatta un responsabile.',
+            'tax_code.regex' => 'Il codice fiscale non è valido.',
+        ]);
     }
 }

@@ -87,7 +87,7 @@ function onSaved(deal: Deal) {
     <div class="page-header">
       <h1>Pipeline di vendita</h1>
       <div class="toolbar">
-        <input v-model="q" class="input search" type="search" placeholder="Cerca opportunità, brand, azienda…" aria-label="Cerca" />
+        <input v-model="q" class="input search" type="search" placeholder="Cerca opportunità, brand, cliente…" aria-label="Cerca" />
         <select v-if="auth.seesEverything" v-model="ownerId" class="input owner" aria-label="Venditore">
           <option :value="null">Tutti i venditori</option>
           <option v-for="u in users" :key="u.id" :value="u.id">{{ u.name }}</option>

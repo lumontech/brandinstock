@@ -14,6 +14,12 @@ export const activityLabels: Record<string, string> = {
   note: 'Nota',
 }
 
+export const segments: Record<string, string> = {
+  b2b: 'B2B',
+  b2c: 'B2C',
+  franchising: 'Franchising',
+}
+
 export const companyTypes: Record<string, string> = {
   boutique: 'Boutique',
   outlet: 'Outlet',

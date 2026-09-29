@@ -1,2 +1,3 @@
 deploy/.env
+deploy/.deployed-commit
 .DS_Store

@@ -86,4 +86,33 @@ class PipelineTest extends TestCase
 
         $this->actingAs($admin)->putJson('/api/stages', ['stages' => $payload])->assertJsonValidationErrors('stages');
     }
+
+    public function test_dashboard_reports_by_segment_month_and_lost_reason(): void
+    {
+        $user = User::factory()->create();
+        $b2b = Company::factory()->for($user, 'owner')->create(['segment' => 'b2b']);
+        $fr = Company::factory()->for($user, 'owner')->create(['segment' => 'franchising']);
+        $won = PipelineStage::where('is_won', true)->first();
+        $lost = PipelineStage::where('is_lost', true)->first();
+
+        Deal::factory()->for($b2b, 'company')->for($user, 'owner')->create(['value' => 1000]);
+        Deal::factory()->for($fr, 'company')->for($user, 'owner')->create(['value' => 3000]);
+        $deal = Deal::factory()->for($fr, 'company')->for($user, 'owner')->create(['value' => 7000]);
+        $this->actingAs($user)->patchJson("/api/deals/{$deal->id}/move", ['pipeline_stage_id' => $won->id]);
+        $lostDeal = Deal::factory()->for($b2b, 'company')->for($user, 'owner')->create(['value' => 500]);
+        $this->actingAs($user)->patchJson("/api/deals/{$lostDeal->id}/move", ['pipeline_stage_id' => $lost->id, 'lost_reason' => 'Prezzo']);
+
+        $data = $this->actingAs($user)->getJson('/api/dashboard')->assertOk()->json();
+
+        $segments = collect($data['by_segment'])->keyBy('segment');
+        $this->assertEquals(1000, $segments['b2b']['open_value']);
+        $this->assertEquals(3000, $segments['franchising']['open_value']);
+        $this->assertEquals(7000, $segments['franchising']['won_year_value']);
+        $this->assertCount(12, $data['monthly']);
+        $this->assertEquals(7000, end($data['monthly'])['won_value']);
+        $this->assertSame('Prezzo', $data['lost_reasons'][0]['reason']);
+
+        $this->actingAs($user)->getJson('/api/dashboard?segment=franchising')->assertJsonPath('open_value', 3000);
+        $this->actingAs($user)->getJson('/api/dashboard?segment=boh')->assertJsonValidationErrors('segment');
+    }
 }

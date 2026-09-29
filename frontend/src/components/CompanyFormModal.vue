@@ -4,10 +4,10 @@ import AppModal from './AppModal.vue'
 import { errorMessage, http } from '@/api/http'
 import { useLookups } from '@/composables/useLookups'
 import { useAuthStore } from '@/stores/auth'
-import { companyTypes } from '@/utils/format'
+import { companyTypes, segments } from '@/utils/format'
 import type { Company } from '@/types'
 
-const props = defineProps<{ company?: Company | null }>()
+const props = defineProps<{ company?: Company | null; segment?: string }>()
 const emit = defineEmits<{ close: []; saved: [company: Company] }>()
 
 const auth = useAuthStore()
@@ -15,7 +15,9 @@ const { users, loadUsers } = useLookups()
 const c = props.company
 const form = reactive({
   name: c?.name ?? '',
+  segment: c?.segment ?? props.segment ?? 'b2b',
   vat_number: c?.vat_number ?? '',
+  tax_code: c?.tax_code ?? '',
   type: c?.type ?? '',
   city: c?.city ?? '',
   province: c?.province ?? '',
@@ -51,12 +53,22 @@ async function submit() {
 </script>
 
 <template>
-  <AppModal :title="company ? 'Modifica azienda' : 'Nuova azienda'" wide @close="emit('close')">
+  <AppModal :title="company ? 'Modifica cliente' : 'Nuovo cliente'" wide @close="emit('close')">
     <form class="stack" @submit.prevent="submit">
       <div v-if="error" class="alert alert-error">{{ error }}</div>
       <div class="form-grid">
-        <div class="field full"><label for="co-name">Ragione sociale *</label><input id="co-name" v-model="form.name" class="input" required maxlength="255" /></div>
+        <div class="field full">
+          <label for="co-name">{{ form.segment === 'b2c' ? 'Nome e cognome' : 'Ragione sociale' }} *</label>
+          <input id="co-name" v-model="form.name" class="input" required maxlength="255" />
+        </div>
+        <div class="field">
+          <label for="co-segment">Categoria</label>
+          <select id="co-segment" v-model="form.segment" class="input">
+            <option v-for="(label, key) in segments" :key="key" :value="key">{{ label }}</option>
+          </select>
+        </div>
         <div class="field"><label for="co-vat">Partita IVA</label><input id="co-vat" v-model="form.vat_number" class="input" maxlength="32" /></div>
+        <div class="field"><label for="co-cf">Codice fiscale</label><input id="co-cf" v-model="form.tax_code" class="input" maxlength="16" /></div>
         <div class="field">
           <label for="co-type">Tipologia</label>
           <select id="co-type" v-model="form.type" class="input">

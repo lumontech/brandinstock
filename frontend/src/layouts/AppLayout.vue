@@ -1,9 +1,12 @@
 <script setup lang="ts">
-import { RouterLink, RouterView, useRouter } from 'vue-router'
+import { computed } from 'vue'
+import { RouterLink, RouterView, useRoute, useRouter } from 'vue-router'
 import { useAuthStore } from '@/stores/auth'
 
 const auth = useAuthStore()
 const router = useRouter()
+const route = useRoute()
+const inSettings = computed(() => route.matched.some((r) => r.name === 'settings'))
 
 async function logout() {
   await auth.logout()
@@ -15,16 +18,14 @@ async function logout() {
   <div class="shell">
     <aside class="sidebar">
       <div class="brand">Brandinstock <span>CRM</span></div>
-      <nav v-if="!auth.needsTwoFactorSetup">
-        <RouterLink :to="{ name: 'pipeline' }">Pipeline</RouterLink>
-        <RouterLink :to="{ name: 'dashboard' }">Dashboard</RouterLink>
-        <RouterLink :to="{ name: 'companies' }">Aziende</RouterLink>
-        <RouterLink :to="{ name: 'activities' }">Attività</RouterLink>
-        <template v-if="auth.isAdmin">
-          <div class="section">Amministrazione</div>
-          <RouterLink :to="{ name: 'users' }">Utenti</RouterLink>
-          <RouterLink :to="{ name: 'stages' }">Fasi pipeline</RouterLink>
+      <nav>
+        <template v-if="!auth.needsTwoFactorSetup">
+          <RouterLink :to="{ name: 'dashboard' }">Cruscotto</RouterLink>
+          <RouterLink :to="{ name: 'pipeline' }">Pipeline</RouterLink>
+          <RouterLink :to="{ name: 'companies' }">Clienti</RouterLink>
+          <RouterLink :to="{ name: 'activities' }">Attività</RouterLink>
         </template>
+        <RouterLink :to="{ name: 'settings' }" class="settings-link" :class="{ 'router-link-active': inSettings }">Impostazioni</RouterLink>
       </nav>
       <div class="user">
         <RouterLink :to="{ name: 'security' }" class="user-name">{{ auth.user?.name }}</RouterLink>
@@ -47,7 +48,7 @@ nav { display: flex; flex-direction: column; gap: 2px; flex: 1; }
 nav a { color: #d1d5db; text-decoration: none; padding: 8px 10px; border-radius: 6px; }
 nav a:hover { background: #1f2937; color: #fff; }
 nav a.router-link-active { background: #374151; color: #fff; }
-.section { font-size: 11px; text-transform: uppercase; letter-spacing: 0.05em; color: #6b7280; padding: 16px 10px 4px; }
+.settings-link { margin-top: auto; border-top: 1px solid #374151; border-radius: 0 0 6px 6px; padding-top: 12px; }
 .user { border-top: 1px solid #374151; padding: 12px 10px 0; }
 .user-name { color: #fff; font-weight: 600; text-decoration: none; }
 .role { font-size: 12px; color: #9ca3af; margin: 2px 0 8px; }
@@ -57,6 +58,6 @@ nav a.router-link-active { background: #374151; color: #fff; }
   .shell { flex-direction: column; }
   .sidebar { width: 100%; height: auto; position: static; }
   nav { flex-direction: row; flex-wrap: wrap; }
-  .section { display: none; }
+  .settings-link { margin-top: 0; border-top: none; }
 }
 </style>

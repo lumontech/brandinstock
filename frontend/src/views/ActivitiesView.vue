@@ -31,7 +31,7 @@ watch(status, load)
     </div>
     <div class="card">
       <ActivityList :activities="activities" show-context @changed="load" />
-      <p class="muted small">Le nuove attività si creano dalla scheda di un'opportunità o di un'azienda.</p>
+      <p class="muted small">Le nuove attività si creano dalla scheda di un'opportunità o di un cliente.</p>
     </div>
   </div>
 </template>

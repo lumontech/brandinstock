@@ -7,7 +7,7 @@ import CompanyFormModal from '@/components/CompanyFormModal.vue'
 import ContactFormModal from '@/components/ContactFormModal.vue'
 import DealFormModal from '@/components/DealFormModal.vue'
 import { useAuthStore } from '@/stores/auth'
-import { companyTypes, money } from '@/utils/format'
+import { companyTypes, money, segments } from '@/utils/format'
 import type { Company, Contact } from '@/types'
 
 const props = defineProps<{ id: string }>()
@@ -29,7 +29,7 @@ async function load() {
 }
 
 async function remove() {
-  if (!company.value || !window.confirm("Eliminare quest'azienda?")) return
+  if (!company.value || !window.confirm('Eliminare questo cliente?')) return
   try {
     await http.delete(`/companies/${company.value.id}`)
     await router.push({ name: 'companies' })
@@ -47,9 +47,12 @@ onMounted(load)
     <template v-if="company">
       <div class="page-header">
         <div>
-          <RouterLink :to="{ name: 'companies' }" class="muted small">← Aziende</RouterLink>
+          <RouterLink :to="{ name: 'companies' }" class="muted small">← Clienti</RouterLink>
           <h1>{{ company.name }}</h1>
-          <div class="muted">{{ company.type ? companyTypes[company.type] : '' }} {{ company.city ? '· ' + company.city : '' }}</div>
+          <div class="muted">
+            <span class="badge">{{ segments[company.segment] }}</span>
+            {{ company.type ? companyTypes[company.type] : '' }} {{ company.city ? '· ' + company.city : '' }}
+          </div>
         </div>
         <div class="toolbar">
           <button class="btn btn-primary" @click="creatingDeal = true">+ Opportunità</button>
@@ -62,7 +65,9 @@ onMounted(load)
         <div class="card">
           <h2>Anagrafica</h2>
           <dl class="details">
+            <dt>Categoria</dt><dd>{{ segments[company.segment] }}</dd>
             <dt>Partita IVA</dt><dd>{{ company.vat_number || '—' }}</dd>
+            <dt>Codice fiscale</dt><dd>{{ company.tax_code || '—' }}</dd>
             <dt>Indirizzo</dt><dd>{{ company.address || '—' }}</dd>
             <dt>Email</dt><dd><a v-if="company.email" :href="`mailto:${company.email}`">{{ company.email }}</a><span v-else>—</span></dd>
             <dt>Telefono</dt><dd>{{ company.phone || '—' }}</dd>

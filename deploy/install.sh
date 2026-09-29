@@ -257,6 +257,7 @@ ok "Database pronto"
 
 step "Avvio del CRM"
 docker compose up -d
+git rev-parse HEAD > .deployed-commit
 ok "Servizi avviati"
 
 # ---------------------------------------------------------------------------

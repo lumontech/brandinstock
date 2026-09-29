@@ -10,16 +10,21 @@ use Illuminate\Database\Eloquent\Model;
 use Illuminate\Database\Eloquent\Relations\HasMany;
 use Illuminate\Database\Eloquent\SoftDeletes;
 
-#[Fillable(['name', 'vat_number', 'type', 'city', 'province', 'country', 'address', 'email', 'phone', 'website', 'notes'])]
+#[Fillable(['name', 'segment', 'vat_number', 'tax_code', 'type', 'city', 'province', 'country', 'address', 'email', 'phone', 'website', 'notes'])]
 class Company extends Model
 {
     use Auditable, HasFactory, OwnedByUser, SoftDeletes;
 
+    public const SEGMENTS = ['b2b', 'b2c', 'franchising'];
+
     public const TYPES = ['boutique', 'outlet', 'grossista', 'ecommerce', 'catena', 'altro'];
+
+    protected $attributes = ['segment' => 'b2b'];
 
     protected function casts(): array
     {
         return [
+            'tax_code' => 'encrypted',
             'address' => 'encrypted',
             'email' => 'encrypted',
             'phone' => 'encrypted',

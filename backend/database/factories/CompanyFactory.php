@@ -13,6 +13,7 @@ class CompanyFactory extends Factory
     {
         return [
             'name' => fake()->company(),
+            'segment' => fake()->randomElement(Company::SEGMENTS),
             'vat_number' => 'IT'.fake()->unique()->numerify('###########'),
             'type' => fake()->randomElement(Company::TYPES),
             'city' => fake()->city(),

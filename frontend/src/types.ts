@@ -68,10 +68,14 @@ export interface Contact {
   owner?: Ref
 }
 
+export type Segment = 'b2b' | 'b2c' | 'franchising'
+
 export interface Company {
   id: number
   name: string
+  segment: Segment
   vat_number: string | null
+  tax_code: string | null
   type: string | null
   city: string | null
   province: string | null
@@ -83,6 +87,10 @@ export interface Company {
   notes: string | null
   owner?: Ref
   deals_count?: number
+  contacts_count?: number
+  open_deals_value?: number
+  last_activity_at?: string | null
+  created_at?: string
   contacts?: Contact[]
   deals?: Deal[]
   activities?: Activity[]
