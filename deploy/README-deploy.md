@@ -142,6 +142,27 @@ crontab -e
 
 ## 4. Aggiornamenti dell'applicazione
 
+### Automatici (consigliato)
+
+Una volta sola, sulla VPS:
+
+```bash
+cd /opt/brandinstock-crm && git pull && ./deploy/enable-auto-update.sh
+```
+
+Da quel momento un timer di systemd esegue `deploy/update.sh` ogni 15 minuti. Lo script:
+- se su GitHub non c'è nulla di nuovo, esce senza fare niente;
+- se c'è una nuova versione, fa un backup, compila, aggiorna il database, riavvia solo i container del CRM e verifica che il sito risponda;
+- non avvia mai due aggiornamenti insieme; se un passaggio fallisce, lascia in funzione la versione precedente.
+
+- Storico: `journalctl -u brandinstock-crm-update -n 100`
+- Prossimo controllo: `systemctl list-timers brandinstock-crm-update.timer`
+- Disattivare: `systemctl disable --now brandinstock-crm-update.timer`
+
+Chiunque possa pubblicare sul branch usato dalla VPS può, di fatto, pubblicare codice in produzione. Proteggi il branch su GitHub e limita chi ha accesso in scrittura.
+
+### Manuali
+
 ```bash
 cd /opt/brandinstock && git pull
 cd deploy
