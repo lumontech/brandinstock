@@ -7,6 +7,7 @@ use App\Models\AuditLog;
 use App\Models\Company;
 use App\Models\Contact;
 use App\Models\User;
+use App\Support\LeadSource;
 use Illuminate\Database\QueryException;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
@@ -22,7 +23,8 @@ use Illuminate\Validation\Rule;
  */
 class CompanyImportController extends Controller
 {
-    private const COMPANY_FIELDS = ['name', 'segment', 'type', 'vat_number', 'tax_code', 'city', 'province', 'country', 'address', 'email', 'phone', 'website', 'notes'];
+    private const COMPANY_FIELDS = ['name', 'segment', 'source', 'type', 'vat_number', 'tax_code', 'city', 'province', 'country', 'address', 'email', 'phone', 'website', 'notes',
+        'billing_name', 'billing_address', 'billing_zip', 'billing_city', 'billing_province', 'sdi_code', 'pec', 'iban', 'payment_terms'];
 
     public function __invoke(Request $request): JsonResponse
     {
@@ -30,6 +32,7 @@ class CompanyImportController extends Controller
             'rows' => ['required', 'array', 'min:1', 'max:500'],
             'rows.*' => ['array'],
             'duplicates' => ['required', Rule::in(['skip', 'update'])],
+            'status' => ['nullable', Rule::in(Company::STATUSES)],
             'dry_run' => ['boolean'],
         ]);
         $user = $request->user();
@@ -52,7 +55,7 @@ class CompanyImportController extends Controller
                 // Ogni riga in un savepoint: se il database rifiuta una riga, si annulla solo
                 // quella e l'importazione prosegue con le altre.
                 try {
-                    $outcome = DB::transaction(fn () => $this->importRow($row, $user, $owners, $payload['duplicates']));
+                    $outcome = DB::transaction(fn () => $this->importRow($row, $user, $owners, $payload['duplicates'], $payload['status'] ?? 'lead'));
                 } catch (QueryException $e) {
                     report($e);
                     $outcome = ['error' => 'Dato non accettato dal database (valore troppo lungo o duplicato).'];
@@ -82,7 +85,7 @@ class CompanyImportController extends Controller
     }
 
     /** @return array{status?: string, contact?: bool, error?: string} */
-    private function importRow(array $row, User $user, $owners, string $duplicates): array
+    private function importRow(array $row, User $user, $owners, string $duplicates, string $status): array
     {
         $existing = $this->findExisting($row, $user);
         if ($existing === false) {
@@ -90,22 +93,23 @@ class CompanyImportController extends Controller
         }
 
         if ($existing && $duplicates === 'skip') {
-            $status = 'skipped';
+            $result = 'skipped';
             $company = $existing;
         } elseif ($existing) {
             // Aggiorna solo i campi valorizzati nel file, senza cancellare dati esistenti.
             $existing->fill(array_filter(array_intersect_key($row, array_flip(self::COMPANY_FIELDS)), fn ($v) => $v !== null && $v !== ''));
             $existing->save();
-            $status = 'updated';
+            $result = 'updated';
             $company = $existing;
         } else {
             $company = new Company(array_intersect_key($row, array_flip(self::COMPANY_FIELDS)));
             $company->owner_id = $owners->get($row['owner_email'] ?? '') ?? $user->id;
+            $company->status = $status;
+            $company->converted_at = $status === 'customer' ? now() : null;
             $company->save();
-            $status = 'created';
         }
 
-        return ['status' => $status, 'contact' => $this->createContact($company, $row, $user)];
+        return ['status' => $result ?? 'created', 'contact' => $this->createContact($company, $row, $user)];
     }
 
     /** Pulisce i valori e converte le etichette leggibili (es. "Franchising", "Boutique") nei codici del CRM. */
@@ -133,6 +137,24 @@ class CompanyImportController extends Controller
             'catena' => ['catena', 'catena retail', 'retail'],
             'altro' => ['altro', 'other'],
         ]);
+        if (! empty($row['source'])) {
+            $original = $row['source'];
+            $row['source'] = LeadSource::match($original) ?? 'altro';
+            // Provenienza non riconosciuta: resta leggibile nelle note.
+            if ($row['source'] === 'altro' && LeadSource::match($original) === null) {
+                $row['notes'] = trim(($row['notes'] ?? '')."\nProvenienza: {$original}");
+            }
+        }
+        if (! empty($row['sdi_code'])) {
+            $sdi = strtoupper(preg_replace('/\s+/', '', (string) $row['sdi_code']));
+            $row['sdi_code'] = preg_match('/^[A-Z0-9]{6,7}$/', $sdi) ? $sdi : null;
+        }
+        if (! empty($row['iban'])) {
+            $row['iban'] = strtoupper(str_replace(' ', '', (string) $row['iban']));
+        }
+        if (! empty($row['pec'])) {
+            $row['pec'] = Str::lower($row['pec']);
+        }
         if (! empty($row['vat_number'])) {
             $vat = strtoupper(preg_replace('/[\s.\-\/]/', '', (string) $row['vat_number']));
             // Una P.IVA ha almeno 8 cifre: altri valori non sono P.IVA e non vanno usati per riconoscere i duplicati.
@@ -186,6 +208,7 @@ class CompanyImportController extends Controller
         return Validator::make($row, [
             'name' => ['required', 'string', 'max:255'],
             'segment' => [Rule::in(Company::SEGMENTS)],
+            'source' => ['nullable', Rule::in(LeadSource::ALL)],
             'type' => ['nullable', Rule::in(Company::TYPES)],
             'vat_number' => ['nullable', 'string', 'max:32'],
             'tax_code' => ['nullable', 'regex:/^[A-Za-z0-9]{11,16}$/'],
@@ -197,6 +220,14 @@ class CompanyImportController extends Controller
             'phone' => ['nullable', 'string', 'max:40'],
             'website' => ['nullable', 'url:http,https', 'max:255'],
             'notes' => ['nullable', 'string', 'max:5000'],
+            'billing_name' => ['nullable', 'string', 'max:255'],
+            'billing_address' => ['nullable', 'string', 'max:255'],
+            'billing_zip' => ['nullable', 'string', 'max:10'],
+            'billing_city' => ['nullable', 'string', 'max:100'],
+            'billing_province' => ['nullable', 'string', 'max:10'],
+            'pec' => ['nullable', 'email', 'max:255'],
+            'iban' => ['nullable', 'regex:/^[A-Z]{2}\d{2}[A-Z0-9]{11,30}$/'],
+            'payment_terms' => ['nullable', 'string', 'max:100'],
             'contact_first_name' => ['nullable', 'string', 'max:100'],
             'contact_last_name' => ['nullable', 'string', 'max:100'],
             'contact_job_title' => ['nullable', 'string', 'max:100'],
@@ -205,6 +236,7 @@ class CompanyImportController extends Controller
         ], [
             'name.required' => 'Manca il nome del cliente.',
             'tax_code.regex' => 'Codice fiscale non valido.',
+            'iban.regex' => 'IBAN non valido.',
         ], [
             'email' => 'email',
             'website' => 'sito web',

@@ -57,4 +57,22 @@ class DataProtectionTest extends TestCase
         $this->assertStringNotContainsString('two_factor_secret', $json);
         $this->assertStringNotContainsString('password', $json);
     }
+
+    public function test_billing_data_is_encrypted_at_rest(): void
+    {
+        $user = User::factory()->create();
+        $id = $this->actingAs($user)->postJson('/api/companies', ['name' => 'Cliente Srl'])->json('data.id');
+
+        $this->actingAs($user)->putJson("/api/companies/{$id}", [
+            'iban' => 'it60 x054 2811 1010 0000 0123 456',
+            'pec' => 'amministrazione@pec.cliente.it',
+            'billing_address' => 'Via Segreta 1',
+            'sdi_code' => 'm5uxcr1',
+        ])->assertOk()->assertJsonPath('data.iban', 'IT60X0542811101000000123456')->assertJsonPath('data.sdi_code', 'M5UXCR1');
+
+        $raw = DB::table('companies')->find($id);
+        $this->assertStringNotContainsString('IT60', $raw->iban);
+        $this->assertStringNotContainsString('pec.cliente', $raw->pec);
+        $this->assertStringNotContainsString('Segreta', $raw->billing_address);
+    }
 }

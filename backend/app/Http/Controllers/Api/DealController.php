@@ -57,6 +57,8 @@ class DealController extends Controller
         $deal = new Deal($data);
         $deal->pipeline_stage_id ??= PipelineStage::orderBy('position')->value('id');
         $deal->currency ??= config('crm.currency');
+        // Se non indicata, la provenienza dell'opportunità è quella del cliente.
+        $deal->source ??= Company::whereKey($deal->company_id)->value('source');
         $deal->owner_id = $this->resolveOwner($request, Deal::class);
         $deal->save();
 

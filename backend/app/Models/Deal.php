@@ -4,6 +4,7 @@ namespace App\Models;
 
 use App\Models\Concerns\Auditable;
 use App\Models\Concerns\OwnedByUser;
+use App\Support\LeadSource;
 use Illuminate\Database\Eloquent\Attributes\Fillable;
 use Illuminate\Database\Eloquent\Factories\HasFactory;
 use Illuminate\Database\Eloquent\Model;
@@ -19,7 +20,7 @@ class Deal extends Model
 {
     use Auditable, HasFactory, OwnedByUser, SoftDeletes;
 
-    public const SOURCES = ['sito', 'fiera', 'passaparola', 'social', 'cold_call', 'email', 'cliente_esistente', 'altro'];
+    public const SOURCES = LeadSource::ALL;
 
     protected function casts(): array
     {
@@ -38,6 +39,15 @@ class Deal extends Model
             if ($deal->isDirty('pipeline_stage_id')) {
                 $stage = PipelineStage::find($deal->pipeline_stage_id);
                 $deal->closed_at = $stage?->isClosed() ? ($deal->closed_at ?? now()) : null;
+            }
+        });
+
+        // Opportunità vinta: il lead diventa cliente.
+        static::saved(function (Deal $deal) {
+            if ($deal->wasChanged('pipeline_stage_id') || $deal->wasRecentlyCreated) {
+                if (PipelineStage::whereKey($deal->pipeline_stage_id)->value('is_won')) {
+                    $deal->company?->markAsCustomer();
+                }
             }
         });
     }

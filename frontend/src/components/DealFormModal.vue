@@ -79,8 +79,8 @@ async function submit() {
           <input id="deal-title" v-model="form.title" class="input" required maxlength="255" placeholder="Es. Stock Guess PE25 – 1.200 capi" />
         </div>
         <div class="field">
-          <label for="deal-company-search">Cliente *</label>
-          <input id="deal-company-search" v-model="companyQuery" class="input" placeholder="Cerca cliente…" />
+          <label for="deal-company-search">Lead / Cliente *</label>
+          <input id="deal-company-search" v-model="companyQuery" class="input" placeholder="Cerca lead o cliente…" />
           <select v-model="form.company_id" class="input" required aria-label="Cliente">
             <option :value="null" disabled>Seleziona…</option>
             <option v-if="deal?.company && !companies.some((c) => c.id === deal?.company_id)" :value="deal.company_id">{{ deal.company.name }}</option>

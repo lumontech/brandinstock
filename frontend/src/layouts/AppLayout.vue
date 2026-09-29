@@ -22,6 +22,7 @@ async function logout() {
         <template v-if="!auth.needsTwoFactorSetup">
           <RouterLink :to="{ name: 'dashboard' }">Cruscotto</RouterLink>
           <RouterLink :to="{ name: 'pipeline' }">Pipeline</RouterLink>
+          <RouterLink :to="{ name: 'leads' }">Leads</RouterLink>
           <RouterLink :to="{ name: 'companies' }">Clienti</RouterLink>
           <RouterLink :to="{ name: 'activities' }">Attività</RouterLink>
         </template>
@@ -34,7 +35,8 @@ async function logout() {
       </div>
     </aside>
     <main class="content">
-      <RouterView />
+      <!-- key: Leads e Clienti usano la stessa vista, va ricreata cambiando pagina -->
+      <RouterView :key="$route.name ?? $route.fullPath" />
     </main>
   </div>
 </template>

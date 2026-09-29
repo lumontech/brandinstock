@@ -74,6 +74,9 @@ export interface Company {
   id: number
   name: string
   segment: Segment
+  status: 'lead' | 'customer'
+  source: string | null
+  converted_at?: string | null
   vat_number: string | null
   tax_code: string | null
   type: string | null
@@ -85,6 +88,19 @@ export interface Company {
   phone: string | null
   website: string | null
   notes: string | null
+  billing_name: string | null
+  billing_address: string | null
+  billing_zip: string | null
+  billing_city: string | null
+  billing_province: string | null
+  billing_country: string | null
+  sdi_code: string | null
+  pec: string | null
+  iban: string | null
+  payment_terms: string | null
+  billing_notes: string | null
+  billing_complete: boolean
+  won_value?: number
   owner?: Ref
   deals_count?: number
   contacts_count?: number

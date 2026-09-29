@@ -29,16 +29,33 @@ export const companyTypes: Record<string, string> = {
   altro: 'Altro',
 }
 
-export const dealSources: Record<string, string> = {
+/** Provenienza dei lead (stesso elenco per clienti e opportunità). */
+export const leadSources: Record<string, string> = {
   sito: 'Sito web',
-  fiera: 'Fiera',
+  google: 'Google / Ads',
+  social: 'Social (Facebook, Instagram)',
+  linkedin: 'LinkedIn',
+  fiera: 'Fiera / Evento',
   passaparola: 'Passaparola',
-  social: 'Social',
+  email: 'Email / Newsletter',
   cold_call: 'Cold call',
-  email: 'Email',
+  whatsapp: 'WhatsApp',
+  agente: 'Agente / Segnalatore',
   cliente_esistente: 'Cliente esistente',
   altro: 'Altro',
 }
+export const dealSources = leadSources
+
+export const paymentTermsOptions = [
+  'Bonifico anticipato',
+  'Bonifico 30 gg data fattura',
+  'Bonifico 60 gg data fattura',
+  'Bonifico 30 gg fine mese',
+  'Ri.Ba. 30 gg',
+  'Ri.Ba. 60 gg',
+  'Contrassegno',
+  'Carta di credito',
+]
 
 /** Da ISO a valore per <input type="datetime-local">. */
 export function toLocalInput(value: string | null | undefined): string {

@@ -143,4 +143,39 @@ class CompanyImportTest extends TestCase
             ->assertOk()->assertJson(['created' => 2, 'skipped' => 1]);
         $this->assertSame(2, Company::count());
     }
+
+    public function test_lead_source_is_imported_and_unknown_values_are_kept_in_notes(): void
+    {
+        $user = User::factory()->create();
+        $rows = [
+            ['name' => 'Da Instagram', 'source' => 'Instagram'],
+            ['name' => 'Da fiera', 'source' => 'Fiera Pitti'],
+            ['name' => 'Misterioso', 'source' => 'Volantino in centro'],
+        ];
+
+        $this->actingAs($user)->postJson('/api/companies/import', ['rows' => $rows, 'duplicates' => 'skip'])->assertJson(['created' => 3]);
+
+        $this->assertSame('social', Company::where('name', 'Da Instagram')->value('source'));
+        $this->assertSame('fiera', Company::where('name', 'Da fiera')->value('source'));
+        $mystery = Company::where('name', 'Misterioso')->first();
+        $this->assertSame('altro', $mystery->source);
+        $this->assertStringContainsString('Volantino in centro', $mystery->notes);
+    }
+
+    public function test_import_as_customers_with_billing_data(): void
+    {
+        $user = User::factory()->create();
+        $rows = [['name' => 'Cliente Fatturato Srl', 'vat_number' => 'IT01234567890', 'billing_address' => 'Via Roma 1', 'billing_zip' => '20100',
+            'billing_city' => 'Milano', 'sdi_code' => 'm5uxcr1', 'iban' => 'IT60 X054 2811 1010 0000 0123 456', 'pec' => 'Amm@PEC.it']];
+
+        $this->actingAs($user)->postJson('/api/companies/import', ['rows' => $rows, 'duplicates' => 'skip', 'status' => 'customer'])->assertJson(['created' => 1]);
+
+        $c = Company::first();
+        $this->assertSame('customer', $c->status);
+        $this->assertNotNull($c->converted_at);
+        $this->assertSame('M5UXCR1', $c->sdi_code);
+        $this->assertSame('IT60X0542811101000000123456', $c->iban);
+        $this->assertTrue($c->hasCompleteBilling());
+        $this->assertSame('lead', Company::factory()->create()->status);
+    }
 }

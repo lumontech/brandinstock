@@ -11,18 +11,19 @@ import { segments } from '@/utils/format'
  * le colonne vengono abbinate ai campi del CRM, poi si fa una prova e infine l'importazione.
  */
 
-const props = defineProps<{ segment?: string }>()
+const props = defineProps<{ segment?: string; status?: 'lead' | 'customer' }>()
 const emit = defineEmits<{ close: []; imported: [] }>()
 const auth = useAuthStore()
 
-interface Field { key: string; label: string; aliases: string[]; group: 'cliente' | 'referente'; managersOnly?: boolean }
+interface Field { key: string; label: string; aliases: string[]; group: 'cliente' | 'fatturazione' | 'referente'; managersOnly?: boolean }
 const FIELDS: Field[] = [
   { key: 'name', label: 'Nome / Ragione sociale *', group: 'cliente', aliases: ['nome', 'name', 'ragione sociale', 'azienda', 'cliente', 'company', 'denominazione', 'negozio'] },
   { key: 'segment', label: 'Categoria (B2B, B2C, Franchising)', group: 'cliente', aliases: ['categoria', 'segmento', 'segment', 'tipo cliente', 'canale', 'b2b b2c'] },
+  { key: 'source', label: 'Provenienza lead', group: 'cliente', aliases: ['provenienza', 'provenienza lead', 'fonte', 'origine', 'origine lead', 'lead source', 'source', 'canale di acquisizione', 'come ci ha conosciuto'] },
   { key: 'type', label: 'Tipologia (boutique, outlet…)', group: 'cliente', aliases: ['tipologia', 'tipo', 'type', 'tipo negozio'] },
   { key: 'vat_number', label: 'Partita IVA', group: 'cliente', aliases: ['partita iva', 'p iva', 'piva', 'p.iva', 'vat', 'vat number', 'iva'] },
   { key: 'tax_code', label: 'Codice fiscale', group: 'cliente', aliases: ['codice fiscale', 'cf', 'c f', 'fiscal code', 'tax code'] },
-  { key: 'email', label: 'Email', group: 'cliente', aliases: ['email', 'e-mail', 'mail', 'email azienda', 'pec'] },
+  { key: 'email', label: 'Email', group: 'cliente', aliases: ['email', 'e-mail', 'mail', 'email azienda'] },
   { key: 'phone', label: 'Telefono', group: 'cliente', aliases: ['telefono', 'tel', 'phone', 'cellulare', 'numero'] },
   { key: 'address', label: 'Indirizzo', group: 'cliente', aliases: ['indirizzo', 'address', 'via', 'sede'] },
   { key: 'city', label: 'Città', group: 'cliente', aliases: ['citta', 'città', 'city', 'comune', 'localita'] },
@@ -31,6 +32,15 @@ const FIELDS: Field[] = [
   { key: 'website', label: 'Sito web', group: 'cliente', aliases: ['sito', 'sito web', 'website', 'web', 'url'] },
   { key: 'notes', label: 'Note', group: 'cliente', aliases: ['note', 'notes', 'descrizione', 'commenti'] },
   { key: 'owner_email', label: 'Email del venditore assegnato', group: 'cliente', aliases: ['venditore', 'commerciale', 'agente', 'owner', 'assegnato a', 'email venditore'], managersOnly: true },
+  { key: 'billing_name', label: 'Intestazione fattura', group: 'fatturazione', aliases: ['intestazione', 'intestazione fattura', 'ragione sociale fatturazione', 'denominazione fiscale'] },
+  { key: 'billing_address', label: 'Indirizzo sede legale', group: 'fatturazione', aliases: ['sede legale', 'indirizzo sede legale', 'indirizzo fatturazione'] },
+  { key: 'billing_zip', label: 'CAP', group: 'fatturazione', aliases: ['cap', 'codice postale', 'zip', 'postal code'] },
+  { key: 'billing_city', label: 'Città sede legale', group: 'fatturazione', aliases: ['citta sede legale', 'comune sede legale', 'citta fatturazione'] },
+  { key: 'billing_province', label: 'Provincia sede legale', group: 'fatturazione', aliases: ['provincia sede legale', 'provincia fatturazione'] },
+  { key: 'sdi_code', label: 'Codice SDI', group: 'fatturazione', aliases: ['sdi', 'codice sdi', 'codice destinatario', 'codice univoco', 'cod destinatario'] },
+  { key: 'pec', label: 'PEC', group: 'fatturazione', aliases: ['pec', 'email pec', 'posta certificata'] },
+  { key: 'iban', label: 'IBAN', group: 'fatturazione', aliases: ['iban', 'coordinate bancarie'] },
+  { key: 'payment_terms', label: 'Condizioni di pagamento', group: 'fatturazione', aliases: ['pagamento', 'condizioni di pagamento', 'modalita di pagamento', 'termini di pagamento'] },
   { key: 'contact_name', label: 'Referente (nome e cognome)', group: 'referente', aliases: ['referente', 'contatto', 'contact', 'persona di riferimento', 'nome referente'] },
   { key: 'contact_first_name', label: 'Referente: nome', group: 'referente', aliases: ['nome referente', 'first name', 'nome contatto'] },
   { key: 'contact_last_name', label: 'Referente: cognome', group: 'referente', aliases: ['cognome', 'cognome referente', 'last name', 'cognome contatto'] },
@@ -39,6 +49,7 @@ const FIELDS: Field[] = [
   { key: 'contact_phone', label: 'Referente: telefono', group: 'referente', aliases: ['telefono referente', 'cellulare referente', 'contact phone'] },
 ]
 const fields = computed(() => FIELDS.filter((f) => !f.managersOnly || auth.seesEverything))
+const groupOrder: Field['group'][] = props.status === 'customer' ? ['cliente', 'fatturazione', 'referente'] : ['cliente', 'referente', 'fatturazione']
 
 type Step = 'file' | 'map' | 'done'
 const step = ref<Step>('file')
@@ -128,7 +139,7 @@ async function run(dryRun: boolean): Promise<Result | null> {
     try {
       const { data: res } = await http.post<Result>(
         '/companies/import',
-        { rows, duplicates: duplicates.value, dry_run: dryRun },
+        { rows, duplicates: duplicates.value, dry_run: dryRun, status: props.status ?? 'lead' },
         { timeout: 120000 },
       )
       total.created += res.created
@@ -169,7 +180,7 @@ async function importAll() {
 </script>
 
 <template>
-  <AppModal title="Importa clienti da CSV" wide @close="emit('close')">
+  <AppModal :title="props.status === 'customer' ? 'Importa clienti da CSV' : 'Importa leads da CSV'" wide @close="emit('close')">
     <div class="stack">
       <div v-if="error" class="alert alert-error" role="alert">{{ error }}</div>
 
@@ -193,8 +204,8 @@ async function importAll() {
         </p>
 
         <div class="map-grid">
-          <template v-for="group in ['cliente', 'referente'] as const" :key="group">
-            <h3 class="map-title">{{ group === 'cliente' ? 'Dati del cliente' : 'Referente (facoltativo)' }}</h3>
+          <template v-for="group in groupOrder" :key="group">
+            <h3 class="map-title">{{ { cliente: 'Dati principali', fatturazione: 'Fatturazione (facoltativo)', referente: 'Referente (facoltativo)' }[group] }}</h3>
             <div v-for="f in fields.filter((x) => x.group === group)" :key="f.key" class="map-row">
               <label :for="`map-${f.key}`">{{ f.label }}</label>
               <select :id="`map-${f.key}`" v-model="mapping[f.key]" class="input" @change="check = null">
@@ -237,7 +248,7 @@ async function importAll() {
 
         <div v-if="check" class="alert" :class="check.errors.length ? 'alert-info' : 'alert-success'">
           <strong>Risultato della prova</strong> (nessun dato è stato salvato):
-          {{ check.created }} nuovi clienti, {{ check.updated }} aggiornati, {{ check.skipped }} già presenti saltati,
+          {{ check.created }} nuovi {{ props.status === 'customer' ? 'clienti' : 'leads' }}, {{ check.updated }} aggiornati, {{ check.skipped }} già presenti saltati,
           {{ check.contacts_created }} referenti.
           <span v-if="check.errors.length"> {{ check.errors.length }} righe con errori non verranno importate.</span>
         </div>
@@ -263,7 +274,7 @@ async function importAll() {
       <!-- 3. Fine -->
       <template v-else>
         <div class="alert alert-success">
-          Importazione completata: {{ final?.created }} nuovi clienti, {{ final?.updated }} aggiornati,
+          Importazione completata: {{ final?.created }} nuovi {{ props.status === 'customer' ? 'clienti' : 'leads' }}, {{ final?.updated }} aggiornati,
           {{ final?.skipped }} saltati, {{ final?.contacts_created }} referenti creati.
         </div>
         <ul v-if="final?.errors.length" class="errors small">

@@ -3,11 +3,12 @@ import { computed, onMounted, ref } from 'vue'
 import { useRouter } from 'vue-router'
 import AppModal from './AppModal.vue'
 import ActivityList from './ActivityList.vue'
+import BillingFormModal from './BillingFormModal.vue'
 import CompanyFormModal from './CompanyFormModal.vue'
 import ContactFormModal from './ContactFormModal.vue'
 import DealFormModal from './DealFormModal.vue'
 import { errorMessage, http } from '@/api/http'
-import { companyTypes, formatDate, money, segments } from '@/utils/format'
+import { companyTypes, formatDate, leadSources, money, segments } from '@/utils/format'
 import type { Company, Contact } from '@/types'
 
 /** Scheda rapida del cliente in un popup: tutti i dettagli senza lasciare la griglia. */
@@ -19,9 +20,11 @@ const router = useRouter()
 const company = ref<Company | null>(null)
 const error = ref('')
 const editing = ref(false)
+const editingBilling = ref(false)
+const confirmStatus = ref(false)
 const creatingDeal = ref(false)
 const contactModal = ref<{ contact: Contact | null } | null>(null)
-const tab = ref<'details' | 'contacts' | 'deals' | 'activities'>('details')
+const tab = ref<'details' | 'billing' | 'contacts' | 'deals' | 'activities'>('details')
 
 async function load() {
   try {
@@ -40,6 +43,19 @@ const openDeals = computed(() => (company.value?.deals ?? []).filter((d) => !d.s
 const openValue = computed(() => openDeals.value.reduce((t, d) => t + d.value, 0))
 const wonValue = computed(() => (company.value?.deals ?? []).filter((d) => d.stage?.is_won).reduce((t, d) => t + d.value, 0))
 
+async function setStatus(status: 'lead' | 'customer') {
+  if (!company.value) return
+  try {
+    company.value = (await http.put<{ data: Company }>(`/companies/${company.value.id}`, { status })).data.data
+    confirmStatus.value = false
+    await load()
+    emit('changed')
+    if (status === 'customer') tab.value = 'billing'
+  } catch (e) {
+    error.value = errorMessage(e)
+  }
+}
+
 function openDeal(id: number) {
   emit('close')
   router.push({ name: 'deal', params: { id } })
@@ -49,23 +65,39 @@ onMounted(load)
 </script>
 
 <template>
-  <AppModal :title="company?.name ?? 'Cliente'" wide @close="emit('close')">
+  <AppModal :title="company ? `${company.status === 'customer' ? 'Cliente' : 'Lead'} · ${company.name}` : 'Caricamento'" wide @close="emit('close')">
     <div v-if="error" class="alert alert-error">{{ error }}</div>
     <div v-else-if="!company" class="empty">Caricamento…</div>
 
     <div v-else class="stack">
       <div class="summary">
         <div class="tags">
+          <span class="pill" :class="company.status === 'customer' ? 'st-customer' : 'st-lead'">{{ company.status === 'customer' ? 'Cliente' : 'Lead' }}</span>
           <span class="pill" :class="`seg-${company.segment}`">{{ segments[company.segment] }}</span>
+          <span v-if="company.source" class="badge">{{ leadSources[company.source] }}</span>
           <span v-if="company.type" class="badge">{{ companyTypes[company.type] }}</span>
           <span v-if="company.city" class="muted">{{ company.city }}{{ company.province ? ` (${company.province})` : '' }}</span>
           <span class="muted">· {{ company.owner?.name }}</span>
         </div>
         <div class="toolbar">
           <button class="btn btn-sm" @click="editing = true">Modifica</button>
+          <template v-if="!confirmStatus">
+            <button v-if="company.status === 'lead'" class="btn btn-sm" @click="confirmStatus = true">Segna come cliente</button>
+            <button v-else class="btn btn-sm" @click="confirmStatus = true">Riporta a lead</button>
+          </template>
+          <span v-else class="confirm">
+            {{ company.status === 'lead' ? 'Spostarlo in Clienti?' : 'Riportarlo nei Leads?' }}
+            <button class="btn btn-sm btn-primary" @click="setStatus(company.status === 'lead' ? 'customer' : 'lead')">Sì</button>
+            <button class="btn btn-sm" @click="confirmStatus = false">No</button>
+          </span>
           <button class="btn btn-sm" @click="creatingDeal = true">+ Opportunità</button>
           <button class="btn btn-sm" @click="emit('close'); router.push({ name: 'company', params: { id: company.id } })">Apri scheda completa</button>
         </div>
+      </div>
+
+      <div v-if="company.status === 'customer' && !company.billing_complete" class="alert alert-info billing-alert">
+        <span>Mancano i dati per la fattura elettronica (intestazione, P.IVA o C.F., indirizzo, CAP, città e codice SDI o PEC).</span>
+        <button class="btn btn-sm btn-primary" @click="editingBilling = true">Completa i dati</button>
       </div>
 
       <div class="figures">
@@ -77,26 +109,57 @@ onMounted(load)
 
       <nav class="tabs" aria-label="Sezioni">
         <button class="tab" :class="{ active: tab === 'details' }" @click="tab = 'details'">Anagrafica</button>
+        <button class="tab" :class="{ active: tab === 'billing' }" @click="tab = 'billing'">
+          Fatturazione <span v-if="company.status === 'customer'" class="dot" :class="company.billing_complete ? 'ok' : 'missing'" />
+        </button>
         <button class="tab" :class="{ active: tab === 'contacts' }" @click="tab = 'contacts'">Referenti ({{ company.contacts?.length ?? 0 }})</button>
         <button class="tab" :class="{ active: tab === 'deals' }" @click="tab = 'deals'">Opportunità ({{ company.deals?.length ?? 0 }})</button>
         <button class="tab" :class="{ active: tab === 'activities' }" @click="tab = 'activities'">Attività</button>
       </nav>
 
-      <dl v-if="tab === 'details'" class="details">
-        <dt>{{ company.segment === 'b2c' ? 'Nome e cognome' : 'Ragione sociale' }}</dt><dd>{{ company.name }}</dd>
-        <dt>Categoria</dt><dd>{{ segments[company.segment] }}</dd>
-        <dt>Tipologia</dt><dd>{{ company.type ? companyTypes[company.type] : '—' }}</dd>
-        <dt>Partita IVA</dt><dd>{{ company.vat_number || '—' }}</dd>
-        <dt>Codice fiscale</dt><dd>{{ company.tax_code || '—' }}</dd>
-        <dt>Indirizzo</dt><dd>{{ company.address || '—' }}</dd>
-        <dt>Città</dt><dd>{{ company.city || '—' }} {{ company.province ? `(${company.province})` : '' }} {{ company.country }}</dd>
-        <dt>Email</dt><dd><a v-if="company.email" :href="`mailto:${company.email}`">{{ company.email }}</a><span v-else>—</span></dd>
-        <dt>Telefono</dt><dd><a v-if="company.phone" :href="`tel:${company.phone}`">{{ company.phone }}</a><span v-else>—</span></dd>
-        <dt>Sito web</dt><dd><a v-if="company.website" :href="company.website" target="_blank" rel="noopener noreferrer">{{ company.website }}</a><span v-else>—</span></dd>
-        <dt>Venditore</dt><dd>{{ company.owner?.name }}</dd>
-        <dt>Cliente dal</dt><dd>{{ formatDate(company.created_at) }}</dd>
-        <dt>Note</dt><dd>{{ company.notes || '—' }}</dd>
-      </dl>
+      <div v-if="tab === 'details'" class="stack">
+        <dl class="details">
+          <dt>{{ company.segment === 'b2c' ? 'Nome e cognome' : 'Ragione sociale' }}</dt><dd>{{ company.name }}</dd>
+          <dt>Categoria</dt><dd>{{ segments[company.segment] }}</dd>
+          <dt>Provenienza lead</dt><dd>{{ company.source ? leadSources[company.source] : '—' }}</dd>
+          <dt>Email</dt><dd><a v-if="company.email" :href="`mailto:${company.email}`">{{ company.email }}</a><span v-else>—</span></dd>
+          <dt>Telefono</dt><dd><a v-if="company.phone" :href="`tel:${company.phone}`">{{ company.phone }}</a><span v-else>—</span></dd>
+          <dt>Tipologia</dt><dd>{{ company.type ? companyTypes[company.type] : '—' }}</dd>
+          <dt>Città</dt><dd>{{ company.city || '—' }}</dd>
+          <dt>Venditore</dt><dd>{{ company.owner?.name }}</dd>
+        </dl>
+        <details class="more">
+          <summary>Altre informazioni</summary>
+          <dl class="details">
+            <dt>Partita IVA</dt><dd>{{ company.vat_number || '—' }}</dd>
+            <dt>Codice fiscale</dt><dd>{{ company.tax_code || '—' }}</dd>
+            <dt>Indirizzo</dt><dd>{{ company.address || '—' }} {{ company.province ? `(${company.province})` : '' }} {{ company.country }}</dd>
+            <dt>Sito web</dt><dd><a v-if="company.website" :href="company.website" target="_blank" rel="noopener noreferrer">{{ company.website }}</a><span v-else>—</span></dd>
+            <dt>Inserito il</dt><dd>{{ formatDate(company.created_at) }}</dd>
+            <dt v-if="company.converted_at">Cliente dal</dt><dd v-if="company.converted_at">{{ formatDate(company.converted_at) }}</dd>
+            <dt>Note</dt><dd>{{ company.notes || '—' }}</dd>
+          </dl>
+        </details>
+      </div>
+
+      <div v-else-if="tab === 'billing'" class="stack">
+        <div><button class="btn btn-sm" @click="editingBilling = true">Modifica dati di fatturazione</button></div>
+        <dl class="details">
+          <dt>Intestazione</dt><dd>{{ company.billing_name || company.name }}</dd>
+          <dt>Partita IVA</dt><dd>{{ company.vat_number || '—' }}</dd>
+          <dt>Codice fiscale</dt><dd>{{ company.tax_code || '—' }}</dd>
+          <dt>Sede legale</dt>
+          <dd>
+            <template v-if="company.billing_address">{{ company.billing_address }}<br />{{ company.billing_zip }} {{ company.billing_city }} {{ company.billing_province ? `(${company.billing_province})` : '' }} {{ company.billing_country }}</template>
+            <span v-else>—</span>
+          </dd>
+          <dt>Codice SDI</dt><dd>{{ company.sdi_code || '—' }}</dd>
+          <dt>PEC</dt><dd>{{ company.pec || '—' }}</dd>
+          <dt>IBAN</dt><dd>{{ company.iban || '—' }}</dd>
+          <dt>Pagamento</dt><dd>{{ company.payment_terms || '—' }}</dd>
+          <dt>Note amministrazione</dt><dd>{{ company.billing_notes || '—' }}</dd>
+        </dl>
+      </div>
 
       <div v-else-if="tab === 'contacts'" class="stack">
         <div><button class="btn btn-sm" @click="contactModal = { contact: null }">+ Referente</button></div>
@@ -133,6 +196,7 @@ onMounted(load)
       <ActivityList v-else :activities="company.activities ?? []" :company-id="company.id" show-context @changed="changed" />
     </div>
 
+    <BillingFormModal v-if="editingBilling && company" :company="company" @close="editingBilling = false" @saved="editingBilling = false; changed()" />
     <CompanyFormModal v-if="editing && company" :company="company" @close="editing = false" @saved="editing = false; changed()" />
     <DealFormModal v-if="creatingDeal && company" :company-id="company.id" @close="creatingDeal = false" @saved="creatingDeal = false; tab = 'deals'; changed()" />
     <ContactFormModal v-if="contactModal && company" :company-id="company.id" :contact="contactModal.contact" @close="contactModal = null" @saved="contactModal = null; changed()" />
@@ -150,6 +214,16 @@ onMounted(load)
 .tab.active { color: var(--text); border-bottom-color: var(--text); font-weight: 600; }
 .table .num { text-align: right; font-variant-numeric: tabular-nums; }
 .pill { display: inline-block; padding: 2px 8px; border-radius: 999px; font-size: 11px; font-weight: 600; }
+.st-lead { background: #fef3c7; color: #92400e; }
+.st-customer { background: #dcfce7; color: #166534; }
+.confirm { display: inline-flex; align-items: center; gap: 6px; font-size: 13px; }
+.billing-alert { display: flex; justify-content: space-between; align-items: center; gap: 12px; flex-wrap: wrap; }
+.dot { display: inline-block; width: 7px; height: 7px; border-radius: 50%; margin-left: 4px; vertical-align: middle; }
+.dot.ok { background: #16a34a; }
+.dot.missing { background: #dc2626; }
+.more { border: 1px solid var(--border); border-radius: 8px; padding: 10px 12px; }
+.more summary { cursor: pointer; font-weight: 600; }
+.more[open] summary { margin-bottom: 10px; }
 .seg-b2b { background: #dbeafe; color: #1e40af; }
 .seg-b2c { background: #dcfce7; color: #166534; }
 .seg-franchising { background: #ede9fe; color: #5b21b6; }

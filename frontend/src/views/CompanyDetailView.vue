@@ -3,11 +3,12 @@ import { onMounted, ref } from 'vue'
 import { useRouter } from 'vue-router'
 import { errorMessage, http } from '@/api/http'
 import ActivityList from '@/components/ActivityList.vue'
+import BillingFormModal from '@/components/BillingFormModal.vue'
 import CompanyFormModal from '@/components/CompanyFormModal.vue'
 import ContactFormModal from '@/components/ContactFormModal.vue'
 import DealFormModal from '@/components/DealFormModal.vue'
 import { useAuthStore } from '@/stores/auth'
-import { companyTypes, money, segments } from '@/utils/format'
+import { companyTypes, leadSources, money, segments } from '@/utils/format'
 import type { Company, Contact } from '@/types'
 
 const props = defineProps<{ id: string }>()
@@ -17,6 +18,7 @@ const router = useRouter()
 const company = ref<Company | null>(null)
 const error = ref('')
 const editing = ref(false)
+const editingBilling = ref(false)
 const creatingDeal = ref(false)
 const contactModal = ref<{ contact: Contact | null } | null>(null)
 
@@ -32,7 +34,7 @@ async function remove() {
   if (!company.value || !window.confirm('Eliminare questo cliente?')) return
   try {
     await http.delete(`/companies/${company.value.id}`)
-    await router.push({ name: 'companies' })
+    await router.push({ name: company.value.status === 'customer' ? 'companies' : 'leads' })
   } catch (e) {
     error.value = errorMessage(e)
   }
@@ -47,9 +49,10 @@ onMounted(load)
     <template v-if="company">
       <div class="page-header">
         <div>
-          <RouterLink :to="{ name: 'companies' }" class="muted small">← Clienti</RouterLink>
+          <RouterLink :to="{ name: company.status === 'customer' ? 'companies' : 'leads' }" class="muted small">← {{ company.status === 'customer' ? 'Clienti' : 'Leads' }}</RouterLink>
           <h1>{{ company.name }}</h1>
           <div class="muted">
+            <span class="badge">{{ company.status === 'customer' ? 'Cliente' : 'Lead' }}</span>
             <span class="badge">{{ segments[company.segment] }}</span>
             {{ company.type ? companyTypes[company.type] : '' }} {{ company.city ? '· ' + company.city : '' }}
           </div>
@@ -66,6 +69,7 @@ onMounted(load)
           <h2>Anagrafica</h2>
           <dl class="details">
             <dt>Categoria</dt><dd>{{ segments[company.segment] }}</dd>
+            <dt>Provenienza lead</dt><dd>{{ company.source ? leadSources[company.source] : '—' }}</dd>
             <dt>Partita IVA</dt><dd>{{ company.vat_number || '—' }}</dd>
             <dt>Codice fiscale</dt><dd>{{ company.tax_code || '—' }}</dd>
             <dt>Indirizzo</dt><dd>{{ company.address || '—' }}</dd>
@@ -74,6 +78,24 @@ onMounted(load)
             <dt>Sito</dt><dd><a v-if="company.website" :href="company.website" target="_blank" rel="noopener noreferrer">{{ company.website }}</a><span v-else>—</span></dd>
             <dt>Venditore</dt><dd>{{ company.owner?.name }}</dd>
             <dt>Note</dt><dd>{{ company.notes || '—' }}</dd>
+          </dl>
+        </div>
+
+        <div class="card">
+          <div class="page-header" style="margin-bottom: 8px">
+            <h2 style="margin: 0">Fatturazione</h2>
+            <span class="toolbar">
+              <span v-if="company.status === 'customer'" class="badge" :class="company.billing_complete ? 'badge-success' : 'badge-danger'">{{ company.billing_complete ? 'Dati completi' : 'Dati mancanti' }}</span>
+              <button class="btn btn-sm" @click="editingBilling = true">Modifica</button>
+            </span>
+          </div>
+          <dl class="details">
+            <dt>Intestazione</dt><dd>{{ company.billing_name || company.name }}</dd>
+            <dt>Sede legale</dt><dd>{{ company.billing_address ? `${company.billing_address}, ${company.billing_zip ?? ''} ${company.billing_city ?? ''} ${company.billing_province ? '(' + company.billing_province + ')' : ''}` : '—' }}</dd>
+            <dt>Codice SDI</dt><dd>{{ company.sdi_code || '—' }}</dd>
+            <dt>PEC</dt><dd>{{ company.pec || '—' }}</dd>
+            <dt>IBAN</dt><dd>{{ company.iban || '—' }}</dd>
+            <dt>Pagamento</dt><dd>{{ company.payment_terms || '—' }}</dd>
           </dl>
         </div>
 
@@ -113,6 +135,7 @@ onMounted(load)
         </div>
       </div>
 
+      <BillingFormModal v-if="editingBilling" :company="company" @close="editingBilling = false" @saved="editingBilling = false; load()" />
       <CompanyFormModal v-if="editing" :company="company" @close="editing = false" @saved="editing = false; load()" />
       <DealFormModal v-if="creatingDeal" :company-id="company.id" @close="creatingDeal = false" @saved="(d) => router.push({ name: 'deal', params: { id: d.id } })" />
       <ContactFormModal v-if="contactModal" :company-id="company.id" :contact="contactModal.contact" @close="contactModal = null" @saved="contactModal = null; load()" />

@@ -7,15 +7,19 @@ import CompanyFormModal from '@/components/CompanyFormModal.vue'
 import ImportClientsModal from '@/components/ImportClientsModal.vue'
 import { useLookups } from '@/composables/useLookups'
 import { useAuthStore } from '@/stores/auth'
-import { companyTypes, formatDate, money, segments } from '@/utils/format'
+import { companyTypes, formatDate, leadSources, money, segments } from '@/utils/format'
 import type { Company, Paginated, Segment } from '@/types'
 
 /**
- * Vista a griglia dei clienti, in stile foglio di calcolo: modifica diretta nelle celle,
- * ordinamento, filtri, raggruppamento e scelta delle colonne.
+ * Vista a griglia di Leads e Clienti, in stile foglio di calcolo: modifica diretta nelle celle,
+ * ordinamento, filtri, raggruppamento e scelta delle colonne. Le colonne visibili di default
+ * cambiano: per i lead contano contatto e provenienza, per i clienti i dati di fatturazione.
  */
 
-type Editor = 'text' | 'email' | 'url' | 'segment' | 'type' | 'owner'
+const props = defineProps<{ mode: 'lead' | 'customer' }>()
+const isCustomers = props.mode === 'customer'
+
+type Editor = 'text' | 'email' | 'url' | 'segment' | 'type' | 'owner' | 'source'
 interface Column {
   key: string
   label: string
@@ -23,29 +27,41 @@ interface Column {
   sort?: string
   editor?: Editor
   align?: 'right'
-  hiddenByDefault?: boolean
+  /** In quale vista la colonna è visibile di default. */
+  show: ('lead' | 'customer')[]
 }
 
+const L = ['lead'] as ('lead' | 'customer')[]
+const C = ['customer'] as ('lead' | 'customer')[]
+const LC = ['lead', 'customer'] as ('lead' | 'customer')[]
 const COLUMNS: Column[] = [
-  { key: 'name', label: 'Cliente', width: 240, sort: 'name', editor: 'text' },
-  { key: 'segment', label: 'Categoria', width: 120, sort: 'segment', editor: 'segment' },
-  { key: 'type', label: 'Tipologia', width: 130, sort: 'type', editor: 'type' },
-  { key: 'city', label: 'Città', width: 140, sort: 'city', editor: 'text' },
-  { key: 'province', label: 'Prov.', width: 70, sort: 'province', editor: 'text', hiddenByDefault: true },
-  { key: 'vat_number', label: 'Partita IVA', width: 150, sort: 'vat_number', editor: 'text' },
-  { key: 'tax_code', label: 'Codice fiscale', width: 170, editor: 'text', hiddenByDefault: true },
-  { key: 'email', label: 'Email', width: 210, editor: 'email' },
-  { key: 'phone', label: 'Telefono', width: 150, editor: 'text' },
-  { key: 'website', label: 'Sito web', width: 190, editor: 'url', hiddenByDefault: true },
-  { key: 'owner', label: 'Venditore', width: 150, sort: 'owner', editor: 'owner' },
-  { key: 'contacts_count', label: 'Referenti', width: 95, sort: 'contacts_count', align: 'right' },
-  { key: 'deals_count', label: 'Opportunità', width: 110, sort: 'deals_count', align: 'right' },
-  { key: 'open_deals_value', label: 'Valore aperto', width: 130, sort: 'open_deals_value', align: 'right' },
-  { key: 'last_activity_at', label: 'Ultima attività', width: 130, sort: 'last_activity_at' },
-  { key: 'created_at', label: 'Creato il', width: 120, sort: 'created_at', hiddenByDefault: true },
+  { key: 'name', label: isCustomers ? 'Cliente' : 'Lead', width: 240, sort: 'name', editor: 'text', show: LC },
+  { key: 'segment', label: 'Categoria', width: 120, sort: 'segment', editor: 'segment', show: LC },
+  { key: 'source', label: 'Provenienza', width: 170, sort: 'source', editor: 'source', show: L },
+  { key: 'email', label: 'Email', width: 210, editor: 'email', show: L },
+  { key: 'phone', label: 'Telefono', width: 150, editor: 'text', show: L },
+  { key: 'type', label: 'Tipologia', width: 130, sort: 'type', editor: 'type', show: L },
+  { key: 'city', label: 'Città', width: 140, sort: 'city', editor: 'text', show: L },
+  { key: 'vat_number', label: 'Partita IVA', width: 150, sort: 'vat_number', editor: 'text', show: C },
+  { key: 'billing_complete', label: 'Fatturazione', width: 120, show: C },
+  { key: 'sdi_code', label: 'Codice SDI', width: 110, sort: 'sdi_code', editor: 'text', show: C },
+  { key: 'pec', label: 'PEC', width: 200, editor: 'email', show: [] },
+  { key: 'billing_city', label: 'Sede (città)', width: 140, sort: 'billing_city', editor: 'text', show: C },
+  { key: 'payment_terms', label: 'Pagamento', width: 190, sort: 'payment_terms', editor: 'text', show: C },
+  { key: 'province', label: 'Prov.', width: 70, sort: 'province', editor: 'text', show: [] },
+  { key: 'tax_code', label: 'Codice fiscale', width: 170, editor: 'text', show: [] },
+  { key: 'website', label: 'Sito web', width: 190, editor: 'url', show: [] },
+  { key: 'owner', label: 'Venditore', width: 150, sort: 'owner', editor: 'owner', show: LC },
+  { key: 'contacts_count', label: 'Referenti', width: 95, sort: 'contacts_count', align: 'right', show: [] },
+  { key: 'deals_count', label: 'Opportunità', width: 110, sort: 'deals_count', align: 'right', show: L },
+  { key: 'open_deals_value', label: 'Valore aperto', width: 130, sort: 'open_deals_value', align: 'right', show: LC },
+  { key: 'won_value', label: 'Vinto', width: 120, sort: 'won_value', align: 'right', show: C },
+  { key: 'last_activity_at', label: 'Ultima attività', width: 130, sort: 'last_activity_at', show: L },
+  { key: 'converted_at', label: 'Cliente dal', width: 120, sort: 'converted_at', show: C },
+  { key: 'created_at', label: 'Inserito il', width: 120, sort: 'created_at', show: [] },
 ]
 
-const GROUPS = { none: 'Nessuno', segment: 'Categoria', type: 'Tipologia', owner: 'Venditore', city: 'Città' } as const
+const GROUPS = { none: 'Nessuno', segment: 'Categoria', source: 'Provenienza', type: 'Tipologia', owner: 'Venditore', city: 'Città', billing: 'Dati di fatturazione' } as const
 type GroupBy = keyof typeof GROUPS
 const TABS: { key: Segment | ''; label: string }[] = [
   { key: '', label: 'Tutti' },
@@ -59,7 +75,7 @@ const router = useRouter()
 const { users, loadUsers } = useLookups()
 
 // --- Preferenze della vista (solo in questo browser) ---
-const PREFS_KEY = 'bis.clients.grid.v1'
+const PREFS_KEY = `bis.${props.mode}.grid.v2`
 function readPrefs(): { hidden?: string[]; groupBy?: GroupBy; segment?: Segment | '' } {
   try {
     return JSON.parse(localStorage.getItem(PREFS_KEY) ?? '{}')
@@ -68,13 +84,14 @@ function readPrefs(): { hidden?: string[]; groupBy?: GroupBy; segment?: Segment 
   }
 }
 const prefs = readPrefs()
-const hidden = ref(new Set<string>(prefs.hidden ?? COLUMNS.filter((c) => c.hiddenByDefault).map((c) => c.key)))
+const hidden = ref(new Set<string>(prefs.hidden ?? COLUMNS.filter((c) => !c.show.includes(props.mode)).map((c) => c.key)))
 const groupBy = ref<GroupBy>(prefs.groupBy && prefs.groupBy in GROUPS ? prefs.groupBy : 'none')
 
 // --- Filtri e dati ---
 const segment = ref<Segment | ''>(prefs.segment ?? '')
 const q = ref('')
 const type = ref('')
+const source = ref('')
 const ownerId = ref<number | null>(null)
 const sort = reactive({ key: 'name', direction: 'asc' as 'asc' | 'desc' })
 const rows = ref<Company[]>([])
@@ -107,7 +124,9 @@ async function load(page = 1) {
         page,
         per_page: 100,
         q: q.value || undefined,
+        status: props.mode,
         segment: segment.value || undefined,
+        source: source.value || undefined,
         type: type.value || undefined,
         owner_id: ownerId.value || undefined,
         sort: sort.key,
@@ -129,7 +148,7 @@ onMounted(async () => {
 })
 
 let timer: number | undefined
-watch([q, type, ownerId, segment], () => {
+watch([q, type, source, ownerId, segment], () => {
   clearTimeout(timer)
   timer = window.setTimeout(() => load(), 250)
 })
@@ -159,6 +178,8 @@ function toggleColumn(key: string) {
 function groupLabel(row: Company): string {
   switch (groupBy.value) {
     case 'segment': return segments[row.segment] ?? 'Senza categoria'
+    case 'source': return row.source ? (leadSources[row.source] ?? row.source) : 'Provenienza non indicata'
+    case 'billing': return row.billing_complete ? 'Dati completi' : 'Dati mancanti'
     case 'type': return row.type ? (companyTypes[row.type] ?? row.type) : 'Senza tipologia'
     case 'owner': return row.owner?.name ?? 'Senza venditore'
     case 'city': return row.city || 'Senza città'
@@ -189,6 +210,10 @@ function toggleGroup(key: string) {
 function display(row: Company, key: string): string {
   switch (key) {
     case 'segment': return segments[row.segment] ?? ''
+    case 'source': return row.source ? (leadSources[row.source] ?? row.source) : ''
+    case 'billing_complete': return row.billing_complete ? 'Completi' : 'Mancanti'
+    case 'won_value': return row.won_value ? money(row.won_value) : ''
+    case 'converted_at': return formatDate(row.converted_at)
     case 'type': return row.type ? (companyTypes[row.type] ?? row.type) : ''
     case 'owner': return row.owner?.name ?? ''
     case 'open_deals_value': return row.open_deals_value ? money(row.open_deals_value) : ''
@@ -245,8 +270,8 @@ async function commitEdit(row: Company) {
   try {
     const { data } = await http.put<{ data: Company }>(`/companies/${row.id}`, payload)
     // La risposta non contiene i totali calcolati: aggiorno solo i campi modificabili.
-    const { contacts_count, deals_count, open_deals_value, last_activity_at } = row
-    Object.assign(row, data.data, { contacts_count, deals_count, open_deals_value, last_activity_at })
+    const { contacts_count, deals_count, open_deals_value, last_activity_at, won_value } = row
+    Object.assign(row, data.data, { contacts_count, deals_count, open_deals_value, last_activity_at, won_value })
     editing.value = null
     error.value = ''
   } catch (e) {
@@ -271,8 +296,8 @@ async function createRow() {
   const name = newName.value.trim()
   if (!name) return
   try {
-    const { data } = await http.post<{ data: Company }>('/companies', { name, segment: segment.value || 'b2b' })
-    rows.value = [{ ...data.data, contacts_count: 0, deals_count: 0, open_deals_value: 0, last_activity_at: null }, ...rows.value]
+    const { data } = await http.post<{ data: Company }>('/companies', { name, segment: segment.value || 'b2b', status: props.mode })
+    rows.value = [{ ...data.data, contacts_count: 0, deals_count: 0, open_deals_value: 0, won_value: 0, last_activity_at: null }, ...rows.value]
     if (meta.value) meta.value.total += 1
     newName.value = ''
     error.value = ''
@@ -287,13 +312,18 @@ const isEditing = (row: Company, col: Column) => editing.value?.id === row.id &&
 <template>
   <div class="clients">
     <div class="page-header">
-      <h1>Clienti</h1>
+      <div>
+        <h1>{{ isCustomers ? 'Clienti' : 'Leads' }}</h1>
+        <p class="muted small subtitle">
+          {{ isCustomers ? 'Chi ha già acquistato: qui servono i dati di fatturazione.' : "Contatti commerciali: quando vinci un'opportunità in pipeline diventano Clienti." }}
+        </p>
+      </div>
       <div class="toolbar">
         <nav class="tabs" aria-label="Categoria">
           <button v-for="t in TABS" :key="t.key" class="tab" :class="{ active: segment === t.key }" @click="segment = t.key">{{ t.label }}</button>
         </nav>
         <button class="btn" @click="importing = true">Importa CSV</button>
-        <button class="btn btn-primary" @click="creating = true">+ Nuovo cliente</button>
+        <button class="btn btn-primary" @click="creating = true">{{ isCustomers ? '+ Nuovo cliente' : '+ Nuovo lead' }}</button>
       </div>
     </div>
 
@@ -302,6 +332,10 @@ const isEditing = (row: Company, col: Column) => editing.value?.id === row.id &&
       <select v-model="type" class="input narrow" aria-label="Tipologia">
         <option value="">Tutte le tipologie</option>
         <option v-for="(label, key) in companyTypes" :key="key" :value="key">{{ label }}</option>
+      </select>
+      <select v-model="source" class="input narrow" aria-label="Provenienza">
+        <option value="">Tutte le provenienze</option>
+        <option v-for="(label, key) in leadSources" :key="key" :value="key">{{ label }}</option>
       </select>
       <select v-if="auth.seesEverything" v-model="ownerId" class="input narrow" aria-label="Venditore">
         <option :value="null">Tutti i venditori</option>
@@ -321,7 +355,7 @@ const isEditing = (row: Company, col: Column) => editing.value?.id === row.id &&
           </label>
         </div>
       </div>
-      <span class="muted small count">{{ meta?.total ?? 0 }} clienti</span>
+      <span class="muted small count">{{ meta?.total ?? 0 }} {{ isCustomers ? 'clienti' : 'leads' }}</span>
     </div>
 
     <div v-if="error" class="alert alert-error" role="alert">{{ error }}</div>
@@ -370,6 +404,10 @@ const isEditing = (row: Company, col: Column) => editing.value?.id === row.id &&
                   <select v-if="col.editor === 'segment'" v-model="draft" class="cell-editor" @change="commitEdit(row)" @blur="cancelEdit" @keydown="onKey($event, row)">
                     <option v-for="(label, key) in segments" :key="key" :value="key">{{ label }}</option>
                   </select>
+                  <select v-else-if="col.editor === 'source'" v-model="draft" class="cell-editor" @change="commitEdit(row)" @blur="cancelEdit" @keydown="onKey($event, row)">
+                    <option value="">—</option>
+                    <option v-for="(label, key) in leadSources" :key="key" :value="key">{{ label }}</option>
+                  </select>
                   <select v-else-if="col.editor === 'type'" v-model="draft" class="cell-editor" @change="commitEdit(row)" @blur="cancelEdit" @keydown="onKey($event, row)">
                     <option value="">—</option>
                     <option v-for="(label, key) in companyTypes" :key="key" :value="key">{{ label }}</option>
@@ -387,6 +425,7 @@ const isEditing = (row: Company, col: Column) => editing.value?.id === row.id &&
                   />
                 </template>
                 <span v-else-if="col.key === 'segment'" class="pill" :class="`seg-${row.segment}`">{{ display(row, col.key) }}</span>
+                <span v-else-if="col.key === 'billing_complete'" class="pill" :class="row.billing_complete ? 'bill-ok' : 'bill-missing'">{{ display(row, col.key) }}</span>
                 <span v-else class="value">{{ display(row, col.key) }}</span>
               </div>
             </template>
@@ -399,26 +438,28 @@ const isEditing = (row: Company, col: Column) => editing.value?.id === row.id &&
           <input
             v-model="newName"
             class="add-input"
-            :placeholder="`Nuovo cliente${segment ? ' ' + segments[segment] : ''}: scrivi il nome e premi Invio`"
+            :placeholder="`${isCustomers ? 'Nuovo cliente' : 'Nuovo lead'}${segment ? ' ' + segments[segment] : ''}: scrivi il nome e premi Invio`"
             aria-label="Nome del nuovo cliente"
             @keydown.enter="createRow"
           />
         </div>
       </div>
 
-      <div v-if="!loading && !rows.length" class="empty">Nessun cliente trovato con questi filtri.</div>
+      <div v-if="!loading && !rows.length" class="empty">
+        {{ isCustomers ? "Nessun cliente con questi filtri. I lead diventano clienti quando vinci un'opportunità in Pipeline." : 'Nessun lead trovato con questi filtri.' }}
+      </div>
     </div>
 
     <div class="footer">
-      <span class="muted small">Clic sul nome per la scheda del cliente · clic su un'altra cella per modificarla · Invio per salvare · Esc per annullare</span>
+      <span class="muted small">Clic sul nome per la scheda completa · clic su un'altra cella per modificarla · Invio per salvare · Esc per annullare</span>
       <button v-if="meta && meta.current_page < meta.last_page" class="btn btn-sm" :disabled="loading" @click="load(meta.current_page + 1)">
         Carica altri ({{ rows.length }} di {{ meta.total }})
       </button>
     </div>
 
     <ClientDetailModal v-if="selectedId" :company-id="selectedId" @close="selectedId = null" @changed="load()" />
-    <CompanyFormModal v-if="creating" :segment="segment || undefined" @close="creating = false" @saved="(c) => router.push({ name: 'company', params: { id: c.id } })" />
-    <ImportClientsModal v-if="importing" :segment="segment || undefined" @close="importing = false" @imported="load()" />
+    <CompanyFormModal v-if="creating" :status="mode" :segment="segment || undefined" @close="creating = false" @saved="(c) => { creating = false; load(); selectedId = c.id }" />
+    <ImportClientsModal v-if="importing" :status="mode" :segment="segment || undefined" @close="importing = false" @imported="load()" />
   </div>
 </template>
 
@@ -467,6 +508,9 @@ const isEditing = (row: Company, col: Column) => editing.value?.id === row.id &&
 .caret { width: 12px; color: var(--muted); }
 
 .pill { display: inline-block; padding: 2px 8px; border-radius: 999px; font-size: 11px; font-weight: 600; }
+.subtitle { margin: 2px 0 0; }
+.bill-ok { background: #dcfce7; color: #166534; }
+.bill-missing { background: #fee2e2; color: #991b1b; }
 .seg-b2b { background: #dbeafe; color: #1e40af; }
 .seg-b2c { background: #dcfce7; color: #166534; }
 .seg-franchising { background: #ede9fe; color: #5b21b6; }

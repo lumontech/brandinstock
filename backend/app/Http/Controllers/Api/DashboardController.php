@@ -119,7 +119,21 @@ class DashboardController extends Controller
             ->get()
             ->map(fn ($r) => ['source' => $r->source, 'deals_count' => (int) $r->deals_count, 'won_value' => (float) $r->won_value]);
 
+        // Provenienza dei clienti acquisiti nell'anno e valore vinto dalle loro opportunità.
+        $clientsBySource = Company::query()
+            ->visibleTo($user)
+            ->when($filters['segment'] ?? null, fn ($q, $segment) => $q->where('segment', $segment))
+            ->when($filters['owner_id'] ?? null, fn ($q, $id) => $q->where('owner_id', $id))
+            ->where('created_at', '>=', now()->startOfYear())
+            ->withSum(['deals as won_value' => fn ($q) => $q->visibleTo($user)->whereIn('pipeline_stage_id', $wonStageIds)], 'value')
+            ->get(['id', 'source'])
+            ->groupBy(fn (Company $c) => $c->source ?? 'non_indicata')
+            ->map(fn ($group, $source) => ['source' => $source, 'clients_count' => $group->count(), 'won_value' => (float) $group->sum('won_value')])
+            ->sortByDesc('clients_count')
+            ->values();
+
         return response()->json([
+            'clients_by_source' => $clientsBySource,
             'by_segment' => $bySegment,
             'monthly' => $monthly,
             'lost_reasons' => $lostReasons,

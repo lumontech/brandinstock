@@ -114,4 +114,22 @@ class CompanyGridTest extends TestCase
 
         $this->actingAs($user)->postJson('/api/companies', ['name' => 'Boutique Y'])->assertCreated()->assertJsonPath('data.segment', 'b2b');
     }
+
+    public function test_client_lead_source_can_be_set_filtered_and_is_inherited_by_new_deals(): void
+    {
+        $user = User::factory()->create();
+        $company = Company::factory()->for($user, 'owner')->create(['source' => null]);
+        Company::factory()->for($user, 'owner')->create(['source' => 'fiera']);
+
+        $this->actingAs($user)->putJson("/api/companies/{$company->id}", ['source' => 'linkedin'])->assertJsonPath('data.source', 'linkedin');
+        $this->actingAs($user)->putJson("/api/companies/{$company->id}", ['source' => 'piccione'])->assertJsonValidationErrors('source');
+        $this->actingAs($user)->getJson('/api/companies?source=linkedin')->assertJsonCount(1, 'data');
+
+        $this->actingAs($user)->postJson('/api/deals', ['title' => 'Stock', 'company_id' => $company->id])->assertJsonPath('data.source', 'linkedin');
+        $this->actingAs($user)->postJson('/api/deals', ['title' => 'Stock 2', 'company_id' => $company->id, 'source' => 'email'])->assertJsonPath('data.source', 'email');
+
+        $report = collect($this->actingAs($user)->getJson('/api/dashboard')->json('clients_by_source'))->keyBy('source');
+        $this->assertSame(1, $report['linkedin']['clients_count']);
+        $this->assertSame(1, $report['fiera']['clients_count']);
+    }
 }

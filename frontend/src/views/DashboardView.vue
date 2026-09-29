@@ -3,7 +3,7 @@ import { computed, onMounted, ref, watch } from 'vue'
 import { http } from '@/api/http'
 import { useLookups } from '@/composables/useLookups'
 import { useAuthStore } from '@/stores/auth'
-import { dealSources, formatDate, money, segments } from '@/utils/format'
+import { dealSources, formatDate, leadSources, money, segments } from '@/utils/format'
 
 interface StageStat { id: number; name: string; color: string; probability: number; deals_count: number; total_value: number }
 interface SellerStat { id: number; name: string; deals_count: number; total_value: number }
@@ -11,6 +11,7 @@ interface SegmentStat { segment: string; open_count: number; open_value: number;
 interface MonthStat { month: string; won_count: number; won_value: number }
 interface LostStat { reason: string; deals_count: number; total_value: number }
 interface SourceStat { source: string; deals_count: number; won_value: number }
+interface ClientSourceStat { source: string; clients_count: number; won_value: number }
 interface Stats {
   open_value: number
   open_count: number
@@ -27,6 +28,7 @@ interface Stats {
   monthly: MonthStat[]
   lost_reasons: LostStat[]
   by_source: SourceStat[]
+  clients_by_source: ClientSourceStat[]
 }
 
 const auth = useAuthStore()
@@ -140,6 +142,21 @@ watch([ownerId, segment], load)
             <div class="bar-label"><span>{{ l.reason }}</span><span class="muted small">{{ l.deals_count }} · {{ money(l.total_value) }}</span></div>
             <div class="bar"><div class="lost" :style="{ width: (l.deals_count / maxLost) * 100 + '%' }" /></div>
           </div>
+        </div>
+
+        <div class="card">
+          <h2>Provenienza dei lead (anno)</h2>
+          <div v-if="!stats.clients_by_source.length" class="empty">Nessun lead inserito quest'anno.</div>
+          <table v-else class="table">
+            <thead><tr><th>Provenienza</th><th class="num">Lead</th><th class="num">Vinto</th></tr></thead>
+            <tbody>
+              <tr v-for="s in stats.clients_by_source" :key="s.source">
+                <td>{{ s.source === 'non_indicata' ? 'Non indicata' : (leadSources[s.source] ?? s.source) }}</td>
+                <td class="num">{{ s.clients_count }}</td>
+                <td class="num">{{ money(s.won_value) }}</td>
+              </tr>
+            </tbody>
+          </table>
         </div>
 
         <div class="card">
