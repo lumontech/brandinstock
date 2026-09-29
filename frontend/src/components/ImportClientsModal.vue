@@ -122,25 +122,36 @@ async function run(dryRun: boolean): Promise<Result | null> {
   error.value = ''
   progress.value = 0
   const total: Result = { created: 0, updated: 0, skipped: 0, contacts_created: 0, errors: [] }
-  try {
-    for (let start = 0; start < data.value.length; start += CHUNK) {
-      const rows = data.value.slice(start, start + CHUNK).map(buildRow)
-      const { data: res } = await http.post<Result>('/companies/import', { rows, duplicates: duplicates.value, dry_run: dryRun })
+  let failedChunks = 0
+  for (let start = 0; start < data.value.length; start += CHUNK) {
+    const rows = data.value.slice(start, start + CHUNK).map(buildRow)
+    try {
+      const { data: res } = await http.post<Result>(
+        '/companies/import',
+        { rows, duplicates: duplicates.value, dry_run: dryRun },
+        { timeout: 120000 },
+      )
       total.created += res.created
       total.updated += res.updated
       total.skipped += res.skipped
       total.contacts_created += res.contacts_created
       // Numero di riga come appare nel file (la riga 1 è l'intestazione).
       total.errors.push(...res.errors.map((e) => ({ ...e, row: start + e.row + 2 })))
-      progress.value = Math.min(100, Math.round(((start + rows.length) / data.value.length) * 100))
+    } catch (e) {
+      // Un blocco non riuscito non ferma gli altri: le sue righe finiscono tra gli errori.
+      failedChunks++
+      const status = (e as { response?: { status?: number } }).response?.status
+      const reason = status && status >= 500 ? 'errore del server' : errorMessage(e)
+      total.errors.push({ row: start + 2, messages: [`Righe ${start + 2}-${start + rows.length + 1} non elaborate (${reason}).`] })
     }
-    return total
-  } catch (e) {
-    error.value = errorMessage(e)
-    return null
-  } finally {
-    busy.value = false
+    progress.value = Math.min(100, Math.round(((start + rows.length) / data.value.length) * 100))
   }
+  busy.value = false
+  if (failedChunks && failedChunks * CHUNK >= data.value.length) {
+    error.value = "Il server non è riuscito a elaborare il file. Riprova tra qualche minuto; se l'errore resta, mandami il file senza dati sensibili."
+    return null
+  }
+  return total
 }
 
 async function verify() {
@@ -243,7 +254,7 @@ async function importAll() {
           <button class="btn" :disabled="busy" @click="step = 'file'">Cambia file</button>
           <span class="spacer" />
           <button class="btn" :disabled="busy" @click="verify">Prova (senza salvare)</button>
-          <button class="btn btn-primary" :disabled="busy || !check" :title="check ? '' : 'Esegui prima la prova'" @click="importAll">
+          <button class="btn btn-primary" :disabled="busy" @click="importAll">
             Importa {{ data.length }} righe
           </button>
         </div>

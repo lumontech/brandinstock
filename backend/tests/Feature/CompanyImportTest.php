@@ -71,9 +71,9 @@ class CompanyImportTest extends TestCase
     public function test_sales_cannot_import_over_another_sellers_client(): void
     {
         [$giulia, $marco] = User::factory(2)->create();
-        $company = Company::factory()->for($marco, 'owner')->create(['vat_number' => 'IT999']);
+        $company = Company::factory()->for($marco, 'owner')->create(['vat_number' => 'IT99999999999']);
 
-        $this->actingAs($giulia)->postJson('/api/companies/import', ['rows' => [['name' => 'X', 'vat_number' => 'IT999', 'city' => 'Hack']], 'duplicates' => 'update'])
+        $this->actingAs($giulia)->postJson('/api/companies/import', ['rows' => [['name' => 'X', 'vat_number' => 'IT99999999999', 'city' => 'Hack']], 'duplicates' => 'update'])
             ->assertJson(['updated' => 0, 'created' => 0])->assertJsonCount(1, 'errors');
         $this->assertNotSame('Hack', $company->fresh()->city);
     }
@@ -104,5 +104,43 @@ class CompanyImportTest extends TestCase
         $rows = array_fill(0, 501, ['name' => 'X']);
 
         $this->actingAs($user)->postJson('/api/companies/import', ['rows' => $rows, 'duplicates' => 'skip'])->assertJsonValidationErrors('rows');
+    }
+
+    public function test_placeholder_values_from_airtable_do_not_break_the_import(): void
+    {
+        $user = User::factory()->create();
+        $rows = [
+            ['name' => 'Negozio A', 'vat_number' => '-', 'tax_code' => '-', 'email' => 'N/A'],
+            ['name' => 'Negozio B', 'vat_number' => '-', 'email' => '-'],
+            ['name' => 'Negozio C', 'vat_number' => 'N/A', 'city' => 'n.d.'],
+            ['name' => 'Negozio D', 'vat_number' => 'N/A', 'tax_code' => 'boh'],
+            ['name' => 'Negozio E', 'vat_number' => 'IT 123.456.789-01'],
+        ];
+
+        $this->actingAs($user)->postJson('/api/companies/import', ['rows' => $rows, 'duplicates' => 'skip', 'dry_run' => true])
+            ->assertOk()->assertJson(['created' => 5, 'skipped' => 0])->assertJsonCount(0, 'errors');
+
+        $this->actingAs($user)->postJson('/api/companies/import', ['rows' => $rows, 'duplicates' => 'skip'])
+            ->assertOk()->assertJson(['created' => 5])->assertJsonCount(0, 'errors');
+
+        $this->assertSame(5, Company::count());
+        $this->assertNull(Company::where('name', 'Negozio A')->value('vat_number'));
+        $this->assertNull(Company::where('name', 'Negozio C')->value('city'));
+        $this->assertSame('IT12345678901', Company::where('name', 'Negozio E')->value('vat_number'));
+    }
+
+    public function test_a_row_rejected_by_the_database_does_not_stop_the_others(): void
+    {
+        $user = User::factory()->create();
+        // Stessa P.IVA scritta in due modi nel file: la seconda riga, normalizzata, coincide con la prima.
+        $rows = [
+            ['name' => 'Alfa', 'vat_number' => 'IT01234567890'],
+            ['name' => 'Beta', 'vat_number' => 'IT 01234567890'],
+            ['name' => 'Gamma'],
+        ];
+
+        $this->actingAs($user)->postJson('/api/companies/import', ['rows' => $rows, 'duplicates' => 'skip'])
+            ->assertOk()->assertJson(['created' => 2, 'skipped' => 1]);
+        $this->assertSame(2, Company::count());
     }
 }

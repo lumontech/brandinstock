@@ -7,6 +7,7 @@ use App\Models\AuditLog;
 use App\Models\Company;
 use App\Models\Contact;
 use App\Models\User;
+use Illuminate\Database\QueryException;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\DB;
@@ -48,34 +49,22 @@ class CompanyImportController extends Controller
                     continue;
                 }
 
-                $existing = $this->findExisting($row, $user);
-                if ($existing === false) {
-                    $result['errors'][] = ['row' => $index, 'messages' => ['Questa partita IVA è già presente nel CRM: contatta un responsabile.']];
+                // Ogni riga in un savepoint: se il database rifiuta una riga, si annulla solo
+                // quella e l'importazione prosegue con le altre.
+                try {
+                    $outcome = DB::transaction(fn () => $this->importRow($row, $user, $owners, $payload['duplicates']));
+                } catch (QueryException $e) {
+                    report($e);
+                    $outcome = ['error' => 'Dato non accettato dal database (valore troppo lungo o duplicato).'];
+                }
+
+                if (isset($outcome['error'])) {
+                    $result['errors'][] = ['row' => $index, 'messages' => [$outcome['error']]];
 
                     continue;
                 }
-
-                if ($existing) {
-                    if ($payload['duplicates'] === 'skip') {
-                        $result['skipped']++;
-                        $company = $existing;
-                    } else {
-                        // Aggiorna solo i campi valorizzati nel file, senza cancellare dati esistenti.
-                        $existing->fill(array_filter(array_intersect_key($row, array_flip(self::COMPANY_FIELDS)), fn ($v) => $v !== null && $v !== ''));
-                        $existing->save();
-                        $result['updated']++;
-                        $company = $existing;
-                    }
-                } else {
-                    $company = new Company(array_intersect_key($row, array_flip(self::COMPANY_FIELDS)));
-                    $company->owner_id = $owners->get($row['owner_email'] ?? '') ?? $user->id;
-                    $company->save();
-                    $result['created']++;
-                }
-
-                if ($this->createContact($company, $row, $user)) {
-                    $result['contacts_created']++;
-                }
+                $result[$outcome['status']]++;
+                $result['contacts_created'] += $outcome['contact'] ? 1 : 0;
             }
 
             if ($dryRun) {
@@ -92,6 +81,33 @@ class CompanyImportController extends Controller
         return response()->json([...$result, 'dry_run' => $dryRun]);
     }
 
+    /** @return array{status?: string, contact?: bool, error?: string} */
+    private function importRow(array $row, User $user, $owners, string $duplicates): array
+    {
+        $existing = $this->findExisting($row, $user);
+        if ($existing === false) {
+            return ['error' => 'Questa partita IVA è già presente nel CRM: contatta un responsabile.'];
+        }
+
+        if ($existing && $duplicates === 'skip') {
+            $status = 'skipped';
+            $company = $existing;
+        } elseif ($existing) {
+            // Aggiorna solo i campi valorizzati nel file, senza cancellare dati esistenti.
+            $existing->fill(array_filter(array_intersect_key($row, array_flip(self::COMPANY_FIELDS)), fn ($v) => $v !== null && $v !== ''));
+            $existing->save();
+            $status = 'updated';
+            $company = $existing;
+        } else {
+            $company = new Company(array_intersect_key($row, array_flip(self::COMPANY_FIELDS)));
+            $company->owner_id = $owners->get($row['owner_email'] ?? '') ?? $user->id;
+            $company->save();
+            $status = 'created';
+        }
+
+        return ['status' => $status, 'contact' => $this->createContact($company, $row, $user)];
+    }
+
     /** Pulisce i valori e converte le etichette leggibili (es. "Franchising", "Boutique") nei codici del CRM. */
     private function normalize(array $raw): array
     {
@@ -99,7 +115,8 @@ class CompanyImportController extends Controller
         foreach ($raw as $key => $value) {
             if (is_string($key) && (is_scalar($value) || $value === null)) {
                 $value = is_string($value) ? trim(preg_replace('/\s+/u', ' ', $value)) : $value;
-                $row[$key] = $value === '' ? null : $value;
+                // Celle vuote o segnaposto tipici degli export ("-", "N/A", "n.d.", "?", "0").
+                $row[$key] = ($value === '' || (is_string($value) && preg_match('/^(-+|n\/?a|n\.?d\.?|none|null|nessun[oa]?|\?+|0)$/iu', $value))) ? null : $value;
             }
         }
 
@@ -117,10 +134,13 @@ class CompanyImportController extends Controller
             'altro' => ['altro', 'other'],
         ]);
         if (! empty($row['vat_number'])) {
-            $row['vat_number'] = strtoupper(str_replace([' ', '.', '-'], '', $row['vat_number']));
+            $vat = strtoupper(preg_replace('/[\s.\-\/]/', '', (string) $row['vat_number']));
+            // Una P.IVA ha almeno 8 cifre: altri valori non sono P.IVA e non vanno usati per riconoscere i duplicati.
+            $row['vat_number'] = preg_match('/^[A-Z]{0,2}\d{8,15}$/', $vat) ? $vat : null;
         }
         if (! empty($row['tax_code'])) {
-            $row['tax_code'] = strtoupper(str_replace(' ', '', $row['tax_code']));
+            $cf = strtoupper(str_replace(' ', '', (string) $row['tax_code']));
+            $row['tax_code'] = preg_match('/^[A-Z0-9]{11,16}$/', $cf) ? $cf : null;
         }
         if (! empty($row['country'])) {
             $row['country'] = strlen($row['country']) === 2 ? strtoupper($row['country']) : (Str::contains(Str::lower($row['country']), 'ital') ? 'IT' : null);
@@ -220,7 +240,7 @@ class CompanyImportController extends Controller
 
         $contact = new Contact([
             'company_id' => $company->id,
-            'first_name' => $row['contact_first_name'] ?? Str::before((string) $row['contact_email'], '@'),
+            'first_name' => Str::limit($row['contact_first_name'] ?? Str::before((string) $row['contact_email'], '@'), 100, ''),
             'last_name' => $row['contact_last_name'] ?? null,
             'job_title' => $row['contact_job_title'] ?? null,
             'email' => $row['contact_email'] ?? null,
