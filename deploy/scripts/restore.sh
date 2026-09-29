@@ -15,6 +15,6 @@ read -r -p "Il database '$DB' verrà sovrascritto. Scrivi RIPRISTINA per continu
 
 docker compose stop app caddy
 age --decrypt --identity "$IDENTITY" "$BACKUP" \
-  | docker compose exec -T db pg_restore -U postgres -d "$DB" --clean --if-exists --no-owner --role="${DB_MIGRATION_USERNAME:-crm_owner}"
+  | docker compose exec -T -e PGPASSWORD="$POSTGRES_PASSWORD" db pg_restore -U postgres -d "$DB" --clean --if-exists --no-owner --role="${DB_MIGRATION_USERNAME:-crm_owner}"
 docker compose start app caddy
 echo "Ripristino completato."

@@ -18,7 +18,9 @@ FILE="${BACKUP_DIR}/crm-${STAMP}.dump.age"
 umask 077
 mkdir -p "$BACKUP_DIR"
 
-docker compose exec -T db pg_dump -U postgres -d "${DB_DATABASE:-brandinstock_crm}" --format=custom --no-owner \
+# La password va passata esplicitamente: altrimenti pg_dump la chiede e resta in attesa.
+docker compose exec -T -e PGPASSWORD="$POSTGRES_PASSWORD" db \
+  pg_dump -U postgres -d "${DB_DATABASE:-brandinstock_crm}" --format=custom --no-owner </dev/null \
   | age --encrypt --recipient "$BACKUP_AGE_RECIPIENT" --output "$FILE"
 
 # Verifica minima: il file esiste e non è vuoto.
