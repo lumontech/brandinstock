@@ -49,12 +49,16 @@ services:
       context: ..
       dockerfile: deploy/caddy/Dockerfile
     image: brandinstock-crm-web
+    # Default: Caddy riceve direttamente il traffico su 80/443 e gestisce HTTPS.
+    # Se la VPS ha già un server web (Nginx/Apache), install.sh pubblica Caddy solo
+    # su 127.0.0.1 e il server web esistente gli inoltra le richieste.
     ports:
-      - "80:80"
-      - "443:443"
-      - "443:443/udp"
+      - "${HTTP_BIND:-80}:80"
+      - "${HTTPS_BIND:-443}:443"
+      - "${HTTPS_BIND:-443}:443/udp"
     environment:
       APP_DOMAIN: ${APP_DOMAIN:?APP_DOMAIN mancante}
+      CADDY_SITE_ADDRESS: ${CADDY_SITE_ADDRESS:-${APP_DOMAIN}}
       ACME_EMAIL: ${ACME_EMAIL:?ACME_EMAIL mancante}
     volumes:
       - caddy_data:/data

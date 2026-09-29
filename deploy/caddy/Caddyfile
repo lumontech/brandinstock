@@ -6,7 +6,7 @@
 	}
 }
 
-{$APP_DOMAIN} {
+{$CADDY_SITE_ADDRESS} {
 	encode zstd gzip
 
 	request_body {

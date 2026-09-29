@@ -8,6 +8,24 @@ Internet ──443──▶ Caddy ──FastCGI (rete interna)──▶ Laravel 
 
 Consigliato: VPS Contabo con **Ubuntu 24.04 LTS**, almeno 4 GB di RAM, e un dominio (es. `crm.brandinstock.it`) con record DNS `A` (e `AAAA`) che punta all'IP della VPS.
 
+## Installazione automatica (consigliata)
+
+Collegati alla VPS come root (`ssh root@IP_DELLA_VPS`) ed esegui:
+
+```bash
+bash <(curl -fsSL https://raw.githubusercontent.com/lumontech/brandinstock/claude/upbeat-bell-mi9fxu/deploy/install.sh)
+```
+
+Lo script chiede solo l'email dell'amministratore e poi fa tutto da solo:
+- installa Docker, se manca;
+- genera password e chiavi e le salva in `/root/brandinstock-crm-CREDENZIALI.txt`;
+- avvia il CRM con HTTPS. Se non hai un dominio usa un indirizzo automatico `crm.<ip>.sslip.io`. Se sulla VPS c'è già Nginx o Apache, aggiunge un sito dedicato senza toccare quelli esistenti;
+- crea l'amministratore e programma i backup cifrati notturni.
+
+Se lo rilanci, aggiorna il CRM mantenendo dati e configurazione.
+
+Le sezioni seguenti descrivono l'installazione manuale e l'hardening del server.
+
 ## 1. Hardening del server (una volta)
 
 Collegati come root con la password ricevuta da Contabo, poi:
