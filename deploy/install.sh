@@ -90,6 +90,13 @@ WEB=""
 if [ -n "$OWNER_80$OWNER_443" ]; then
   case "${OWNER_80:-$OWNER_443}" in
     nginx*) MODE=proxied; WEB=nginx ;;
+    caddy*)
+      HOST_CADDYFILE=/etc/caddy/Caddyfile
+      if systemctl is-active --quiet caddy && [ -f "$HOST_CADDYFILE" ] && command -v caddy >/dev/null; then
+        MODE=proxied; WEB=caddy
+      else
+        die "le porte 80/443 sono usate da Caddy, ma non come servizio di sistema con $HOST_CADDYFILE (forse in un container). Nessuna modifica è stata fatta: invia questo messaggio a chi ti assiste."
+      fi ;;
     apache2*|httpd*) MODE=proxied; WEB=apache ;;
     *)
       die "le porte 80/443 sono occupate da '${OWNER_80:-$OWNER_443}', che lo script non sa configurare in automatico. Nessuna modifica è stata fatta: invia questo messaggio a chi ti assiste." ;;
@@ -113,12 +120,18 @@ ok "Container Docker già presenti: $(docker ps -q 2>/dev/null | wc -l) (non ver
 
 # ---------------------------------------------------------------------------
 step "Riepilogo: cosa verrà AGGIUNTO (nulla di esistente viene modificato o rimosso)"
-echo "    - pacchetti: git, age$( [ "$MODE" = proxied ] && echo ", certbot")$(command -v docker >/dev/null || echo ", Docker")"
+echo "    - pacchetti: git, age$( { [ "$WEB" = nginx ] || [ "$WEB" = apache ]; } && echo ", certbot")$(command -v docker >/dev/null || echo ", Docker")"
 echo "    - cartella del CRM: $INSTALL_DIR"
 echo "    - 3 container Docker isolati (progetto 'brandinstock-crm'): web, app, database"
 if [ "$MODE" = proxied ]; then
-  echo "    - un NUOVO sito $WEB solo per $APP_DOMAIN (gli altri siti restano invariati)"
-  echo "      e il relativo certificato HTTPS"
+  if [ "$WEB" = caddy ]; then
+    echo "    - un NUOVO blocco in fondo a $HOST_CADDYFILE solo per $APP_DOMAIN"
+    echo "      (prima viene fatta una copia di sicurezza del file; gli altri siti restano invariati;"
+    echo "       se la nuova configurazione non è valida il file viene ripristinato)"
+  else
+    echo "    - un NUOVO sito $WEB solo per $APP_DOMAIN (gli altri siti restano invariati)"
+    echo "      e il relativo certificato HTTPS"
+  fi
 else
   echo "    - il CRM userà le porte 80/443, oggi libere"
 fi
@@ -249,7 +262,39 @@ ok "Servizi avviati"
 # ---------------------------------------------------------------------------
 if [ "$MODE" = proxied ]; then
   step "Configurazione di $WEB e certificato HTTPS"
-  if [ "$WEB" = nginx ]; then
+  if [ "$WEB" = caddy ]; then
+    MARK_BEGIN="# >>> brandinstock-crm (aggiunto da install.sh) >>>"
+    MARK_END="# <<< brandinstock-crm <<<"
+    if grep -qF "$MARK_BEGIN" "$HOST_CADDYFILE"; then
+      ok "Blocco del CRM già presente in $HOST_CADDYFILE"
+    else
+      CADDY_BACKUP="$HOST_CADDYFILE.bak-brandinstock-$(date +%Y%m%d%H%M%S)"
+      cp -p "$HOST_CADDYFILE" "$CADDY_BACKUP"
+      ok "Copia di sicurezza: $CADDY_BACKUP"
+      {
+        echo
+        echo "$MARK_BEGIN"
+        echo "# Brandinstock CRM: inoltra le richieste al container del CRM (solo 127.0.0.1)."
+        echo "$APP_DOMAIN {"
+        printf '\tencode zstd gzip\n'
+        printf '\trequest_body {\n\t\tmax_size 12MB\n\t}\n'
+        printf '\treverse_proxy 127.0.0.1:%s\n' "$LOCAL_PORT"
+        echo "}"
+        echo "$MARK_END"
+      } >> "$HOST_CADDYFILE"
+      if ! caddy validate --config "$HOST_CADDYFILE" --adapter caddyfile >/tmp/brandinstock-caddy-validate.log 2>&1; then
+        cp -p "$CADDY_BACKUP" "$HOST_CADDYFILE"
+        tail -5 /tmp/brandinstock-caddy-validate.log
+        die "la configurazione di Caddy non risulta valida con il nuovo blocco: il file originale è stato ripristinato e Caddy NON è stato ricaricato."
+      fi
+      if ! systemctl reload caddy; then
+        cp -p "$CADDY_BACKUP" "$HOST_CADDYFILE"
+        systemctl reload caddy >/dev/null 2>&1 || true
+        die "Caddy non ha accettato la nuova configurazione: il file originale è stato ripristinato."
+      fi
+    fi
+    ok "Caddy ricaricato senza interruzioni: il certificato HTTPS per $APP_DOMAIN viene richiesto in automatico"
+  elif [ "$WEB" = nginx ]; then
     # Layout Debian/Ubuntu (sites-available/enabled) oppure conf.d.
     if [ -d /etc/nginx/sites-enabled ]; then
       CONF=/etc/nginx/sites-available/brandinstock-crm.conf; LINK=/etc/nginx/sites-enabled/brandinstock-crm.conf
