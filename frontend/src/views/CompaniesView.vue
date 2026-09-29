@@ -2,6 +2,7 @@
 import { computed, nextTick, onMounted, reactive, ref, watch } from 'vue'
 import { useRouter } from 'vue-router'
 import { errorMessage, http } from '@/api/http'
+import ClientDetailModal from '@/components/ClientDetailModal.vue'
 import CompanyFormModal from '@/components/CompanyFormModal.vue'
 import ImportClientsModal from '@/components/ImportClientsModal.vue'
 import { useLookups } from '@/composables/useLookups'
@@ -83,6 +84,7 @@ const error = ref('')
 const showFields = ref(false)
 const collapsed = ref(new Set<string>())
 const creating = ref(false)
+const selectedId = ref<number | null>(null)
 const importing = ref(false)
 
 watch([hidden, groupBy, segment], () => {
@@ -199,7 +201,8 @@ function display(row: Company, key: string): string {
 }
 
 function canEdit(col: Column) {
-  return !!col.editor && (col.editor !== 'owner' || auth.seesEverything)
+  // Il nome apre la scheda del cliente (si modifica da lì).
+  return !!col.editor && col.key !== 'name' && (col.editor !== 'owner' || auth.seesEverything)
 }
 
 // --- Modifica diretta ---
@@ -359,9 +362,9 @@ const isEditing = (row: Company, col: Column) => editing.value?.id === row.id &&
                 class="cell"
                 :class="{ right: col.align === 'right', editable: canEdit(col), editing: isEditing(row, col), 'sticky-b': i === 0, name: col.key === 'name' }"
                 role="gridcell"
-                :tabindex="canEdit(col) ? 0 : -1"
-                @click="startEdit(row, col)"
-                @keydown.enter="!isEditing(row, col) && startEdit(row, col)"
+                :tabindex="canEdit(col) || col.key === 'name' ? 0 : -1"
+                @click="col.key === 'name' ? (selectedId = row.id) : startEdit(row, col)"
+                @keydown.enter="col.key === 'name' ? (selectedId = row.id) : !isEditing(row, col) && startEdit(row, col)"
               >
                 <template v-if="isEditing(row, col)">
                   <select v-if="col.editor === 'segment'" v-model="draft" class="cell-editor" @change="commitEdit(row)" @blur="cancelEdit" @keydown="onKey($event, row)">
@@ -407,12 +410,13 @@ const isEditing = (row: Company, col: Column) => editing.value?.id === row.id &&
     </div>
 
     <div class="footer">
-      <span class="muted small">Clic su una cella per modificarla · Invio per salvare · Esc per annullare</span>
+      <span class="muted small">Clic sul nome per la scheda del cliente · clic su un'altra cella per modificarla · Invio per salvare · Esc per annullare</span>
       <button v-if="meta && meta.current_page < meta.last_page" class="btn btn-sm" :disabled="loading" @click="load(meta.current_page + 1)">
         Carica altri ({{ rows.length }} di {{ meta.total }})
       </button>
     </div>
 
+    <ClientDetailModal v-if="selectedId" :company-id="selectedId" @close="selectedId = null" @changed="load()" />
     <CompanyFormModal v-if="creating" :segment="segment || undefined" @close="creating = false" @saved="(c) => router.push({ name: 'company', params: { id: c.id } })" />
     <ImportClientsModal v-if="importing" :segment="segment || undefined" @close="importing = false" @imported="load()" />
   </div>
@@ -437,7 +441,8 @@ const isEditing = (row: Company, col: Column) => editing.value?.id === row.id &&
 .cell { height: 36px; display: flex; align-items: center; padding: 0 10px; border-right: 1px solid #edf0f3; border-bottom: 1px solid #edf0f3; background: var(--surface); white-space: nowrap; overflow: hidden; min-width: 0; }
 .cell .value { overflow: hidden; text-overflow: ellipsis; }
 .cell.right { justify-content: flex-end; font-variant-numeric: tabular-nums; }
-.cell.name { font-weight: 600; }
+.cell.name { font-weight: 600; cursor: pointer; color: #1d4ed8; }
+.cell.name:hover .value { text-decoration: underline; }
 .cell.editable { cursor: text; }
 .cell.editable:hover { background: #f7f9fc; }
 .cell:focus-visible { outline: 2px solid #2563eb; outline-offset: -2px; }
