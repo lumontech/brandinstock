@@ -52,11 +52,13 @@ ok "RAM: ${MEM_MB} MB, disco libero: ${DISK_GB} GB"
 [ "$DISK_GB" -ge 5 ] || die "servono almeno 5 GB liberi sul disco."
 [ "$MEM_MB" -ge 1800 ] || warn "meno di 2 GB di RAM: la compilazione potrebbe essere lenta."
 
-apt-get update -qq
-DEBIAN_FRONTEND=noninteractive apt-get install -y -qq curl git openssl age ca-certificates >/dev/null
-ok "Pacchetti di base presenti"
+command -v curl >/dev/null || die "manca curl: installalo con 'apt install curl' e rilancia."
 
-PUBLIC_IP=$(curl -4 -fsS --max-time 10 https://api.ipify.org || curl -4 -fsS --max-time 10 https://ifconfig.me)
+# Su Contabo l'IP pubblico è direttamente sull'interfaccia di rete; i servizi web sono il ripiego.
+PUBLIC_IP=${PUBLIC_IP:-$(ip -4 route get 1.1.1.1 2>/dev/null | grep -oP 'src \K[0-9.]+' || true)}
+if [[ ! "$PUBLIC_IP" =~ ^[0-9]+\.[0-9]+\.[0-9]+\.[0-9]+$ ]] || [[ "$PUBLIC_IP" =~ ^(10|127|172\.(1[6-9]|2[0-9]|3[01])|192\.168)\. ]]; then
+  PUBLIC_IP=$(curl -4 -fsS --max-time 10 https://api.ipify.org || curl -4 -fsS --max-time 10 https://ifconfig.me || true)
+fi
 [[ "$PUBLIC_IP" =~ ^[0-9]+\.[0-9]+\.[0-9]+\.[0-9]+$ ]] || die "impossibile determinare l'IP pubblico della VPS."
 ok "IP pubblico: $PUBLIC_IP"
 
@@ -103,6 +105,35 @@ if [ "$MODE" = proxied ]; then
 else
   ok "Porte 80/443 libere: il CRM gestirà direttamente HTTPS."
 fi
+
+if [ -e "$INSTALL_DIR" ] && [ ! -f "$INSTALL_DIR/deploy/install.sh" ]; then
+  die "$INSTALL_DIR esiste già e non è un'installazione del CRM: non la tocco. Imposta INSTALL_DIR con un'altra cartella."
+fi
+ok "Container Docker già presenti: $(docker ps -q 2>/dev/null | wc -l) (non verranno toccati)"
+
+# ---------------------------------------------------------------------------
+step "Riepilogo: cosa verrà AGGIUNTO (nulla di esistente viene modificato o rimosso)"
+echo "    - pacchetti: git, age$( [ "$MODE" = proxied ] && echo ", certbot")$(command -v docker >/dev/null || echo ", Docker")"
+echo "    - cartella del CRM: $INSTALL_DIR"
+echo "    - 3 container Docker isolati (progetto 'brandinstock-crm'): web, app, database"
+if [ "$MODE" = proxied ]; then
+  echo "    - un NUOVO sito $WEB solo per $APP_DOMAIN (gli altri siti restano invariati)"
+  echo "      e il relativo certificato HTTPS"
+else
+  echo "    - il CRM userà le porte 80/443, oggi libere"
+fi
+echo "    - backup notturno alle 03:15 (una riga aggiunta al crontab di root)"
+ufw status 2>/dev/null | grep -q "Status: active" && echo "    - firewall: regole per consentire le porte 80 e 443, se non già presenti"
+if [ "${ASSUME_YES:-}" != 1 ]; then
+  CONFIRM=""
+  [ -r /dev/tty ] && read -r -p $'\n    Procedo con l\'installazione? (s/N): ' CONFIRM </dev/tty || true
+  [[ "$CONFIRM" =~ ^[sSyY] ]] || { echo "    Installazione annullata: nessuna modifica è stata fatta."; exit 0; }
+fi
+
+step "Pacchetti necessari"
+apt-get update -qq
+DEBIAN_FRONTEND=noninteractive apt-get install -y -qq git openssl age ca-certificates >/dev/null
+ok "Pacchetti presenti"
 
 # ---------------------------------------------------------------------------
 step "Docker"
@@ -219,7 +250,12 @@ ok "Servizi avviati"
 if [ "$MODE" = proxied ]; then
   step "Configurazione di $WEB e certificato HTTPS"
   if [ "$WEB" = nginx ]; then
-    CONF=/etc/nginx/sites-available/brandinstock-crm.conf
+    # Layout Debian/Ubuntu (sites-available/enabled) oppure conf.d.
+    if [ -d /etc/nginx/sites-enabled ]; then
+      CONF=/etc/nginx/sites-available/brandinstock-crm.conf; LINK=/etc/nginx/sites-enabled/brandinstock-crm.conf
+    else
+      CONF=/etc/nginx/conf.d/brandinstock-crm.conf; LINK=""
+    fi
     if [ ! -f "$CONF" ]; then
       cat > "$CONF" <<EOF
 # Brandinstock CRM: inoltra le richieste al container Caddy (solo 127.0.0.1).
@@ -238,9 +274,12 @@ server {
     }
 }
 EOF
-      ln -sf "$CONF" /etc/nginx/sites-enabled/brandinstock-crm.conf
+      [ -z "$LINK" ] || ln -sf "$CONF" "$LINK"
     fi
-    nginx -t 2>&1 | tail -2
+    if ! nginx -t >/dev/null 2>&1; then
+      rm -f ${LINK:+"$LINK"} "$CONF"
+      die "la configurazione di nginx non è valida con il nuovo sito: il sito del CRM è stato rimosso e nginx NON è stato ricaricato."
+    fi
     systemctl reload nginx
     DEBIAN_FRONTEND=noninteractive apt-get install -y -qq certbot python3-certbot-nginx >/dev/null
     certbot --nginx -d "$APP_DOMAIN" --non-interactive --agree-tos -m "$ADMIN_EMAIL" --redirect --keep-until-expiring
@@ -261,7 +300,11 @@ EOF
 EOF
       a2ensite -q brandinstock-crm >/dev/null
     fi
-    apache2ctl configtest 2>&1 | tail -1
+    if ! apache2ctl configtest >/dev/null 2>&1; then
+      a2dissite -q brandinstock-crm >/dev/null 2>&1 || true
+      rm -f "$CONF"
+      die "la configurazione di Apache non è valida con il nuovo sito: il sito del CRM è stato rimosso e Apache NON è stato ricaricato."
+    fi
     systemctl reload apache2
     DEBIAN_FRONTEND=noninteractive apt-get install -y -qq certbot python3-certbot-apache >/dev/null
     certbot --apache -d "$APP_DOMAIN" --non-interactive --agree-tos -m "$ADMIN_EMAIL" --redirect --keep-until-expiring
@@ -270,7 +313,8 @@ EOF
 fi
 
 if ufw status 2>/dev/null | grep -q "Status: active"; then
-  ufw allow 80/tcp >/dev/null && ufw allow 443/tcp >/dev/null
+  ufw status | grep -qE '^(80|80/tcp)[[:space:]].*ALLOW' || ufw allow 80/tcp >/dev/null
+  ufw status | grep -qE '^(443|443/tcp)[[:space:]].*ALLOW' || ufw allow 443/tcp >/dev/null
   ok "Firewall: porte 80 e 443 consentite"
 fi
 
