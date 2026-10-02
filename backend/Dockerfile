@@ -9,7 +9,7 @@ COPY . .
 RUN composer dump-autoload --optimize --classmap-authoritative --no-dev
 
 # --- Runtime PHP-FPM ---
-FROM php:8.4-fpm-alpine
+FROM php:8.5-fpm-alpine
 
 RUN apk add --no-cache icu-libs libpq \
     && apk add --no-cache --virtual .build-deps $PHPIZE_DEPS icu-dev postgresql-dev \
