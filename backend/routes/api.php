@@ -3,6 +3,7 @@
 use App\Http\Controllers\Api\ActivityController;
 use App\Http\Controllers\Api\AuditLogController;
 use App\Http\Controllers\Api\AuthController;
+use App\Http\Controllers\Api\CompanyBulkController;
 use App\Http\Controllers\Api\CompanyController;
 use App\Http\Controllers\Api\CompanyImportController;
 use App\Http\Controllers\Api\ContactController;
@@ -37,6 +38,7 @@ Route::middleware(['auth:sanctum', 'active', 'two-factor', 'throttle:api'])->gro
     Route::put('stages', [StageController::class, 'sync']);
 
     Route::post('companies/import', CompanyImportController::class)->middleware('throttle:import');
+    Route::post('companies/bulk', CompanyBulkController::class)->middleware('throttle:import');
     Route::apiResource('companies', CompanyController::class);
     Route::apiResource('contacts', ContactController::class);
     Route::apiResource('deals', DealController::class);

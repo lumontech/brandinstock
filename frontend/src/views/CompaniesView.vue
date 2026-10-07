@@ -2,6 +2,7 @@
 import { computed, nextTick, onMounted, reactive, ref, watch } from 'vue'
 import { useRouter } from 'vue-router'
 import { errorMessage, http } from '@/api/http'
+import BulkEditModal from '@/components/BulkEditModal.vue'
 import ClientDetailModal from '@/components/ClientDetailModal.vue'
 import CompanyFormModal from '@/components/CompanyFormModal.vue'
 import ImportClientsModal from '@/components/ImportClientsModal.vue'
@@ -117,7 +118,7 @@ watch([hidden, groupBy, segment], () => {
 }, { deep: true })
 
 const columns = computed(() => COLUMNS.filter((c) => c.key === 'name' || !hidden.value.has(c.key)))
-const gridTemplate = computed(() => `44px ${columns.value.map((c) => `${c.width}px`).join(' ')}`)
+const gridTemplate = computed(() => `64px ${columns.value.map((c) => `${c.width}px`).join(' ')}`)
 
 async function load(page = 1) {
   loading.value = true
@@ -138,6 +139,9 @@ async function load(page = 1) {
       },
     })
     rows.value = page === 1 ? data.data : [...rows.value, ...data.data]
+    // La selezione resta valida solo per le righe ancora visibili.
+    const ids = new Set(rows.value.map((r) => r.id))
+    selected.value = new Set([...selected.value].filter((id) => ids.has(id)))
     meta.value = data.meta
   } catch (e) {
     error.value = errorMessage(e)
@@ -310,6 +314,54 @@ async function createRow() {
   }
 }
 
+// --- Selezione e azioni massive ---
+const selected = ref(new Set<number>())
+const allSelected = computed(() => rows.value.length > 0 && rows.value.every((r) => selected.value.has(r.id)))
+const bulkEditing = ref(false)
+const confirmingDelete = ref(false)
+const bulkBusy = ref(false)
+const notice = ref('')
+
+function toggleRow(id: number) {
+  const next = new Set(selected.value)
+  if (next.has(id)) next.delete(id)
+  else next.add(id)
+  selected.value = next
+  confirmingDelete.value = false
+}
+
+function toggleAll() {
+  selected.value = allSelected.value ? new Set() : new Set(rows.value.map((r) => r.id))
+  confirmingDelete.value = false
+}
+
+function clearSelection() {
+  selected.value = new Set()
+  confirmingDelete.value = false
+}
+
+interface BulkResult { processed: number; skipped: number; skipped_with_deals: number }
+
+async function runBulk(action: 'update' | 'delete', changes?: Record<string, string | number | null>) {
+  bulkBusy.value = true
+  error.value = ''
+  notice.value = ''
+  try {
+    const { data } = await http.post<BulkResult>('/companies/bulk', { ids: [...selected.value], action, changes })
+    const parts = [`${data.processed} ${action === 'delete' ? 'eliminati' : 'aggiornati'}`]
+    if (data.skipped_with_deals) parts.push(`${data.skipped_with_deals} non eliminati perché hanno opportunità collegate`)
+    if (data.skipped) parts.push(`${data.skipped} non accessibili`)
+    notice.value = parts.join(' · ')
+    bulkEditing.value = false
+    clearSelection()
+    await load()
+  } catch (e) {
+    error.value = errorMessage(e)
+  } finally {
+    bulkBusy.value = false
+  }
+}
+
 const isEditing = (row: Company, col: Column) => editing.value?.id === row.id && editing.value.key === col.key
 </script>
 
@@ -365,11 +417,28 @@ const isEditing = (row: Company, col: Column) => editing.value?.id === row.id &&
     </div>
 
     <div v-if="error" class="alert alert-error" role="alert">{{ error }}</div>
+    <div v-if="notice" class="alert alert-success" role="status">{{ notice }}</div>
+
+    <div v-if="selected.size" class="bulk-bar" role="toolbar" aria-label="Azioni sui selezionati">
+      <strong>{{ selected.size }} selezionat{{ selected.size === 1 ? 'o' : 'i' }}</strong>
+      <template v-if="!confirmingDelete">
+        <button class="btn btn-sm" :disabled="bulkBusy" @click="bulkEditing = true">Modifica</button>
+        <button v-if="auth.seesEverything" class="btn btn-sm btn-danger" :disabled="bulkBusy" @click="confirmingDelete = true">Elimina</button>
+        <button class="btn btn-sm" :disabled="bulkBusy" @click="clearSelection">Annulla selezione</button>
+      </template>
+      <template v-else>
+        <span>Eliminare {{ selected.size }} record? Quelli con opportunità collegate verranno mantenuti.</span>
+        <button class="btn btn-sm btn-danger" :disabled="bulkBusy" @click="runBulk('delete')">Sì, elimina</button>
+        <button class="btn btn-sm" :disabled="bulkBusy" @click="confirmingDelete = false">No</button>
+      </template>
+    </div>
 
     <div class="grid-wrap">
       <div class="grid" role="grid" :aria-rowcount="rows.length" :style="{ gridTemplateColumns: gridTemplate }">
         <!-- Intestazione -->
-        <div class="cell head num sticky-a" role="columnheader">#</div>
+        <div class="cell head num sticky-a" role="columnheader">
+          <input type="checkbox" class="pick" :checked="allSelected" :indeterminate="selected.size > 0 && !allSelected" :disabled="!rows.length" aria-label="Seleziona tutti" title="Seleziona tutti" @change="toggleAll" />
+        </div>
         <div
           v-for="(col, i) in columns"
           :key="col.key"
@@ -392,7 +461,8 @@ const isEditing = (row: Company, col: Column) => editing.value?.id === row.id &&
 
           <template v-if="!collapsed.has(group.key)">
             <template v-for="(row, index) in group.rows" :key="row.id">
-              <div class="cell num sticky-a" role="rowheader">
+              <div class="cell num sticky-a" :class="{ picked: selected.has(row.id) }" role="rowheader">
+                <input type="checkbox" class="pick" :checked="selected.has(row.id)" :aria-label="`Seleziona ${row.name}`" @change="toggleRow(row.id)" />
                 <span class="idx">{{ index + 1 }}</span>
                 <button class="open" :aria-label="`Apri ${row.name}`" title="Apri scheda" @click="router.push({ name: 'company', params: { id: row.id } })">↗</button>
               </div>
@@ -463,6 +533,7 @@ const isEditing = (row: Company, col: Column) => editing.value?.id === row.id &&
       </button>
     </div>
 
+    <BulkEditModal v-if="bulkEditing" :count="selected.size" :busy="bulkBusy" @close="bulkEditing = false" @apply="(changes) => runBulk('update', changes)" />
     <ClientDetailModal v-if="selectedId" :company-id="selectedId" @close="selectedId = null" @changed="load()" />
     <CompanyFormModal v-if="creating" :status="mode" :segment="segment || undefined" @close="creating = false" @saved="(c) => { creating = false; load(); selectedId = c.id }" />
     <ImportClientsModal v-if="importing" :status="mode" :segment="segment || undefined" @close="importing = false" @imported="load()" />
@@ -501,10 +572,14 @@ const isEditing = (row: Company, col: Column) => editing.value?.id === row.id &&
 .head.sortable:hover { background: #eef0f4; }
 .arrow { font-size: 9px; margin-left: 6px; color: #2563eb; }
 .sticky-a { position: sticky; left: 0; z-index: 2; }
-.sticky-b { position: sticky; left: 44px; z-index: 2; border-right: 1px solid #d9dde3; }
+.sticky-b { position: sticky; left: 64px; z-index: 2; border-right: 1px solid #d9dde3; }
 .head.sticky-a, .head.sticky-b { z-index: 4; }
 
-.num { justify-content: center; color: #9ca3af; font-size: 11px; padding: 0; }
+.num { justify-content: flex-start; gap: 6px; color: #9ca3af; font-size: 11px; padding: 0 0 0 8px; }
+.num .idx { min-width: 24px; text-align: center; }
+.num.picked { background: #eff6ff; }
+.pick { width: 15px; height: 15px; margin: 0; cursor: pointer; accent-color: #2563eb; }
+.bulk-bar { display: flex; align-items: center; gap: 10px; flex-wrap: wrap; padding: 8px 12px; background: #eff6ff; border: 1px solid #bfdbfe; border-radius: var(--radius); font-size: 13px; }
 .num .open { display: none; border: 1px solid var(--border); background: #fff; border-radius: 4px; cursor: pointer; font-size: 12px; width: 24px; height: 22px; }
 .num:hover .idx, .num:focus-within .idx { display: none; }
 .num:hover .open, .num:focus-within .open { display: inline-block; }
