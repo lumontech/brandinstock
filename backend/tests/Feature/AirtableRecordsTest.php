@@ -18,7 +18,7 @@ class AirtableRecordsTest extends TestCase
     public function test_reads_all_pages_as_text_rows(): void
     {
         Http::fakeSequence(self::URL)
-            ->push(['records' => [['id' => 'rec1', 'fields' => ['Azienda' => 'Uno', 'Città' => ['Parma', 'Roma']]]], 'offset' => 'next'])
+            ->push(['records' => [['id' => 'rec1', 'fields' => ['Azienda' => 'Uno', 'Città' => ['Parma', 'Roma'], 'Creato' => 'Stef Brandinstock', 'Created by' => 'X']]], 'offset' => 'next'])
             ->push(['records' => [['id' => 'rec2', 'fields' => ['Azienda' => 'Due', 'Email' => 'a@b.it', 'Vuoto' => '']]]]);
 
         $this->actingAs(User::factory()->create())->postJson('/api/airtable/records', $this->payload())

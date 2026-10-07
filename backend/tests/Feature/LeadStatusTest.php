@@ -79,4 +79,18 @@ class LeadStatusTest extends TestCase
         $this->assertSame('Mario Bianchi', $old->fresh()->contact_person);
         $this->assertNull(Company::find($id)->contact_person, 'senza riga nelle note resta vuoto');
     }
+
+    public function test_created_by_text_is_removed_from_contact_person(): void
+    {
+        $user = User::factory()->create();
+        $a = Company::factory()->for($user, 'owner')->create(['contact_person' => "Mario Rossi\nCreato da: Stef Brandinstock"]);
+        $b = Company::factory()->for($user, 'owner')->create(['contact_person' => 'Creato: Stef Brandinstock']);
+        $c = Company::factory()->for($user, 'owner')->create(['contact_person' => 'Lucia Bianchi']);
+
+        (require database_path('migrations/2026_10_07_130000_clean_contact_person_created_by.php'))->up();
+
+        $this->assertSame('Mario Rossi', $a->fresh()->contact_person);
+        $this->assertNull($b->fresh()->contact_person);
+        $this->assertSame('Lucia Bianchi', $c->fresh()->contact_person);
+    }
 }

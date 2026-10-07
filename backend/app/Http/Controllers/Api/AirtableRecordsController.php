@@ -17,6 +17,8 @@ class AirtableRecordsController extends Controller
 {
     private const MAX_RECORDS = 20000;
 
+    private const SYSTEM_FIELDS = '/^\s*(creato|creata|created|modificato|modificata|last modified|ultima modifica)(\s+(da|by|il|on|time))?\s*$/iu';
+
     public function __invoke(Request $request): JsonResponse
     {
         $data = $request->validate([
@@ -68,6 +70,10 @@ class AirtableRecordsController extends Controller
             foreach ($response->json('records', []) as $record) {
                 $row = [];
                 foreach ($record['fields'] ?? [] as $name => $value) {
+                    // Campi di sistema di Airtable (chi ha creato o modificato il record): non sono dati del lead.
+                    if (preg_match(self::SYSTEM_FIELDS, (string) $name)) {
+                        continue;
+                    }
                     $text = trim(is_array($value) ? implode(', ', array_map(fn ($v) => is_scalar($v) ? (string) $v : json_encode($v), $value)) : (string) $value);
                     if ($text === '') {
                         continue;
