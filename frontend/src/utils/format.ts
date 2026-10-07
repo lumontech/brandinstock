@@ -46,6 +46,18 @@ export const leadSources: Record<string, string> = {
 }
 export const dealSources = leadSources
 
+/** Stato di lavorazione dei lead (in ordine di avanzamento). */
+export const leadStatuses: Record<string, string> = {
+  nuovo: 'Nuovo',
+  da_richiamare: 'Da richiamare',
+  email_inviata: 'Email inviata',
+  appuntamento: 'Da fissare appuntamento',
+  in_attesa: 'In attesa',
+  qualificato: 'Qualificato',
+  prospect: 'Prospect',
+  non_interessato: 'Non interessato',
+}
+
 export const paymentTermsOptions = [
   'Bonifico anticipato',
   'Bonifico 30 gg data fattura',

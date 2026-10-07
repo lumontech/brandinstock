@@ -9,6 +9,7 @@ use App\Models\Company;
 use App\Models\PipelineStage;
 use App\Models\User;
 use App\Support\LeadSource;
+use App\Support\LeadStatus;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
 use Illuminate\Http\Resources\Json\AnonymousResourceCollection;
@@ -22,7 +23,7 @@ class CompanyController extends Controller
     use ResolvesOwner;
 
     /** Colonne ordinabili della vista a griglia (whitelist: mai ordinare su input libero). */
-    private const SORTABLE = ['name', 'segment', 'source', 'status', 'converted_at', 'won_value', 'billing_city', 'sdi_code', 'payment_terms', 'type', 'city', 'province', 'vat_number', 'created_at', 'deals_count', 'contacts_count', 'open_deals_value', 'last_activity_at', 'owner'];
+    private const SORTABLE = ['name', 'segment', 'source', 'lead_status', 'status', 'converted_at', 'won_value', 'billing_city', 'sdi_code', 'payment_terms', 'type', 'city', 'province', 'vat_number', 'created_at', 'deals_count', 'contacts_count', 'open_deals_value', 'last_activity_at', 'owner'];
 
     public function index(Request $request): AnonymousResourceCollection
     {
@@ -30,6 +31,7 @@ class CompanyController extends Controller
             'q' => ['nullable', 'string', 'max:100'],
             'segment' => ['nullable', Rule::in(Company::SEGMENTS)],
             'source' => ['nullable', Rule::in(LeadSource::ALL)],
+            'lead_status' => ['nullable', Rule::in(LeadStatus::ALL)],
             'status' => ['nullable', Rule::in(Company::STATUSES)],
             'type' => ['nullable', Rule::in(Company::TYPES)],
             'owner_id' => ['nullable', 'integer'],
@@ -59,6 +61,7 @@ class CompanyController extends Controller
                 ->orWhereLike('city', "%{$term}%")))
             ->when($filters['segment'] ?? null, fn ($q, $segment) => $q->where('segment', $segment))
             ->when($filters['source'] ?? null, fn ($q, $source) => $q->where('source', $source))
+            ->when($filters['lead_status'] ?? null, fn ($q, $leadStatus) => $q->where('lead_status', $leadStatus))
             ->when($filters['status'] ?? null, fn ($q, $status) => $q->where('status', $status))
             ->when($filters['type'] ?? null, fn ($q, $type) => $q->where('type', $type))
             ->when($filters['owner_id'] ?? null, fn ($q, $owner) => $q->where('owner_id', $owner))
@@ -132,6 +135,7 @@ class CompanyController extends Controller
             'name' => [$company ? 'sometimes' : 'required', 'string', 'max:255'],
             'segment' => ['sometimes', Rule::in(Company::SEGMENTS)],
             'source' => ['nullable', Rule::in(LeadSource::ALL)],
+            'lead_status' => ['nullable', Rule::in(LeadStatus::ALL)],
             'status' => ['sometimes', Rule::in(Company::STATUSES)],
             'billing_name' => ['nullable', 'string', 'max:255'],
             'billing_address' => ['nullable', 'string', 'max:255'],

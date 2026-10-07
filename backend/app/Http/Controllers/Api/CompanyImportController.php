@@ -8,6 +8,7 @@ use App\Models\Company;
 use App\Models\Contact;
 use App\Models\User;
 use App\Support\LeadSource;
+use App\Support\LeadStatus;
 use Illuminate\Database\QueryException;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
@@ -23,7 +24,7 @@ use Illuminate\Validation\Rule;
  */
 class CompanyImportController extends Controller
 {
-    private const COMPANY_FIELDS = ['name', 'segment', 'source', 'type', 'vat_number', 'tax_code', 'city', 'province', 'country', 'address', 'email', 'phone', 'website', 'notes',
+    private const COMPANY_FIELDS = ['name', 'segment', 'source', 'lead_status', 'type', 'vat_number', 'tax_code', 'city', 'province', 'country', 'address', 'email', 'phone', 'website', 'notes',
         'billing_name', 'billing_address', 'billing_zip', 'billing_city', 'billing_province', 'sdi_code', 'pec', 'iban', 'payment_terms'];
 
     public function __invoke(Request $request): JsonResponse
@@ -165,6 +166,18 @@ class CompanyImportController extends Controller
                 $row['notes'] = trim(($row['notes'] ?? '')."\nProvenienza: {$original}");
             }
         }
+        if (! empty($row['lead_status'])) {
+            $original = $row['lead_status'];
+            $row['lead_status'] = LeadStatus::match($original);
+            // Stato non riconosciuto: resta leggibile nelle note.
+            if ($row['lead_status'] === null) {
+                $row['notes'] = trim(($row['notes'] ?? '')."\nStato: {$original}");
+            }
+        }
+        if (empty($row['lead_status'])) {
+            // Nessuno stato: vale quello predefinito del modello ("nuovo").
+            unset($row['lead_status']);
+        }
         if (! empty($row['sdi_code'])) {
             $sdi = strtoupper(preg_replace('/\s+/', '', (string) $row['sdi_code']));
             $row['sdi_code'] = preg_match('/^[A-Z0-9]{6,7}$/', $sdi) ? $sdi : null;
@@ -246,6 +259,7 @@ class CompanyImportController extends Controller
             'name' => ['required', 'string', 'max:255'],
             'segment' => [Rule::in(Company::SEGMENTS)],
             'source' => ['nullable', Rule::in(LeadSource::ALL)],
+            'lead_status' => ['nullable', Rule::in(LeadStatus::ALL)],
             'type' => ['nullable', Rule::in(Company::TYPES)],
             'vat_number' => ['nullable', 'string', 'max:32'],
             'tax_code' => ['nullable', 'regex:/^[A-Za-z0-9]{11,16}$/'],

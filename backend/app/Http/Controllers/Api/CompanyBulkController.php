@@ -7,6 +7,7 @@ use App\Models\AuditLog;
 use App\Models\Company;
 use App\Models\User;
 use App\Support\LeadSource;
+use App\Support\LeadStatus;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\DB;
@@ -31,6 +32,7 @@ class CompanyBulkController extends Controller
             'changes' => ['required_if:action,update', 'array'],
             'changes.segment' => ['sometimes', Rule::in(Company::SEGMENTS)],
             'changes.source' => ['sometimes', 'nullable', Rule::in(LeadSource::ALL)],
+            'changes.lead_status' => ['sometimes', 'nullable', Rule::in(LeadStatus::ALL)],
             'changes.type' => ['sometimes', 'nullable', Rule::in(Company::TYPES)],
             'changes.status' => ['sometimes', Rule::in(Company::STATUSES)],
             'changes.owner_id' => ['sometimes', 'integer', Rule::exists(User::class, 'id')->where('is_active', true)],
@@ -58,7 +60,7 @@ class CompanyBulkController extends Controller
                     $result['deals_deleted'] += $company->deleteWithRelated();
                 } else {
                     $changes = $data['changes'];
-                    $company->fill(array_intersect_key($changes, array_flip(['segment', 'source', 'type'])));
+                    $company->fill(array_intersect_key($changes, array_flip(['segment', 'source', 'type', 'lead_status'])));
                     if (array_key_exists('owner_id', $changes)) {
                         $company->owner_id = $changes['owner_id'];
                     }

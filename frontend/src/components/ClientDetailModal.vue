@@ -8,7 +8,7 @@ import CompanyFormModal from './CompanyFormModal.vue'
 import ContactFormModal from './ContactFormModal.vue'
 import DealFormModal from './DealFormModal.vue'
 import { errorMessage, http } from '@/api/http'
-import { companyTypes, formatDate, leadSources, money, segments } from '@/utils/format'
+import { companyTypes, formatDate, leadSources, leadStatuses, money, segments } from '@/utils/format'
 import type { Company, Contact } from '@/types'
 
 /** Scheda rapida del cliente in un popup: tutti i dettagli senza lasciare la griglia. */
@@ -56,6 +56,18 @@ async function setStatus(status: 'lead' | 'customer') {
   }
 }
 
+async function setLeadStatus(event: Event) {
+  if (!company.value) return
+  const lead_status = (event.target as HTMLSelectElement).value || null
+  try {
+    const { data } = await http.put<{ data: Company }>(`/companies/${company.value.id}`, { lead_status })
+    company.value.lead_status = data.data.lead_status
+    emit('changed')
+  } catch (e) {
+    error.value = errorMessage(e)
+  }
+}
+
 function openDeal(id: number) {
   emit('close')
   router.push({ name: 'deal', params: { id } })
@@ -74,6 +86,10 @@ onMounted(load)
         <div class="tags">
           <span class="pill" :class="company.status === 'customer' ? 'st-customer' : 'st-lead'">{{ company.status === 'customer' ? 'Cliente' : 'Lead' }}</span>
           <span class="pill" :class="`seg-${company.segment}`">{{ segments[company.segment] }}</span>
+          <select v-if="company.status === 'lead'" class="input lead-status" :class="`ls-${company.lead_status ?? 'none'}`" :value="company.lead_status ?? ''" aria-label="Stato del lead" @change="setLeadStatus">
+            <option value="">Stato: da definire</option>
+            <option v-for="(label, key) in leadStatuses" :key="key" :value="key">{{ label }}</option>
+          </select>
           <span v-if="company.source" class="badge">{{ leadSources[company.source] }}</span>
           <span v-if="company.type" class="badge">{{ companyTypes[company.type] }}</span>
           <span v-if="company.city" class="muted">{{ company.city }}{{ company.province ? ` (${company.province})` : '' }}</span>
@@ -121,6 +137,7 @@ onMounted(load)
         <dl class="details">
           <dt>{{ company.segment === 'b2c' ? 'Nome e cognome' : 'Ragione sociale' }}</dt><dd>{{ company.name }}</dd>
           <dt>Categoria</dt><dd>{{ segments[company.segment] }}</dd>
+          <dt v-if="company.status === 'lead'">Stato del lead</dt><dd v-if="company.status === 'lead'">{{ company.lead_status ? leadStatuses[company.lead_status] : '—' }}</dd>
           <dt>Provenienza lead</dt><dd>{{ company.source ? leadSources[company.source] : '—' }}</dd>
           <dt>Email</dt><dd><a v-if="company.email" :href="`mailto:${company.email}`">{{ company.email }}</a><span v-else>—</span></dd>
           <dt>Telefono</dt><dd><a v-if="company.phone" :href="`tel:${company.phone}`">{{ company.phone }}</a><span v-else>—</span></dd>
@@ -204,6 +221,7 @@ onMounted(load)
 </template>
 
 <style scoped>
+.lead-status { width: auto; height: 26px; padding: 0 8px; font-size: 12px; font-weight: 600; border-radius: 999px; }
 .summary { display: flex; justify-content: space-between; align-items: center; gap: 12px; flex-wrap: wrap; }
 .tags { display: flex; align-items: center; gap: 8px; flex-wrap: wrap; }
 .figures { display: grid; grid-template-columns: repeat(auto-fit, minmax(130px, 1fr)); gap: 8px; }

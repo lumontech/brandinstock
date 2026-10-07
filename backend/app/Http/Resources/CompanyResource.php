@@ -17,6 +17,7 @@ class CompanyResource extends JsonResource
             'name' => $this->name,
             'segment' => $this->segment,
             'source' => $this->source,
+            'lead_status' => $this->lead_status,
             'status' => $this->status,
             'converted_at' => $this->converted_at?->toIso8601String(),
             'billing_name' => $this->billing_name,

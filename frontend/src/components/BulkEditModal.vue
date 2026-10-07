@@ -3,7 +3,7 @@ import { computed, ref, watch } from 'vue'
 import AppModal from './AppModal.vue'
 import { useLookups } from '@/composables/useLookups'
 import { useAuthStore } from '@/stores/auth'
-import { companyTypes, leadSources, segments } from '@/utils/format'
+import { companyTypes, leadSources, leadStatuses, segments } from '@/utils/format'
 
 /** Modifica massiva: si sceglie un campo e il valore da applicare a tutti i record selezionati. */
 const props = defineProps<{ count: number; busy?: boolean }>()
@@ -12,12 +12,13 @@ const emit = defineEmits<{ close: []; apply: [changes: Record<string, string | n
 const auth = useAuthStore()
 const { users } = useLookups()
 
-type Field = 'segment' | 'source' | 'type' | 'owner_id' | 'status'
-const field = ref<Field>('segment')
+type Field = 'segment' | 'lead_status' | 'source' | 'type' | 'owner_id' | 'status'
+const field = ref<Field>('lead_status')
 const value = ref('')
 
 const fields = computed(() => {
   const list: { key: Field; label: string }[] = [
+    { key: 'lead_status', label: 'Stato del lead' },
     { key: 'segment', label: 'Categoria' },
     { key: 'source', label: 'Provenienza' },
     { key: 'type', label: 'Tipologia' },
@@ -30,6 +31,7 @@ const fields = computed(() => {
 const options = computed<Record<string, string>>(() => {
   switch (field.value) {
     case 'segment': return segments
+    case 'lead_status': return leadStatuses
     case 'source': return leadSources
     case 'type': return companyTypes
     case 'status': return { lead: 'Lead', customer: 'Cliente' }
@@ -38,7 +40,7 @@ const options = computed<Record<string, string>>(() => {
   }
 })
 // Provenienza e tipologia si possono anche svuotare.
-const clearable = computed(() => field.value === 'source' || field.value === 'type')
+const clearable = computed(() => ['source', 'type', 'lead_status'].includes(field.value))
 
 watch(field, () => (value.value = ''))
 

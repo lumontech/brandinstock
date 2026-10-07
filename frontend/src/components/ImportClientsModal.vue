@@ -20,6 +20,7 @@ const FIELDS: Field[] = [
   { key: 'name', label: 'Nome / Ragione sociale *', group: 'cliente', aliases: ['nome', 'name', 'ragione sociale', 'azienda', 'cliente', 'company', 'denominazione', 'negozio'] },
   { key: 'segment', label: 'Categoria (B2B, B2C, Franchising)', group: 'cliente', aliases: ['categoria', 'segmento', 'segment', 'tipo cliente', 'canale', 'b2b b2c'] },
   { key: 'source', label: 'Provenienza lead', group: 'cliente', aliases: ['provenienza', 'provenienza lead', 'provenienza leads', 'fonte', 'origine', 'origine lead', 'lead source', 'source', 'canale di acquisizione', 'come ci ha conosciuto'] },
+  { key: 'lead_status', label: 'Stato del lead', group: 'cliente', aliases: ['stato', 'stato lead', 'stato del lead', 'fase', 'status'] },
   { key: 'type', label: 'Tipologia (boutique, outlet…)', group: 'cliente', aliases: ['tipologia', 'tipo', 'type', 'tipo negozio'] },
   { key: 'vat_number', label: 'Partita IVA', group: 'cliente', aliases: ['partita iva', 'p iva', 'piva', 'p.iva', 'vat', 'vat number', 'iva'] },
   { key: 'tax_code', label: 'Codice fiscale', group: 'cliente', aliases: ['codice fiscale', 'cf', 'c f', 'fiscal code', 'tax code'] },

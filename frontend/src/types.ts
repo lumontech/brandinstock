@@ -76,6 +76,7 @@ export interface Company {
   segment: Segment
   status: 'lead' | 'customer'
   source: string | null
+  lead_status?: string | null
   converted_at?: string | null
   vat_number: string | null
   tax_code: string | null

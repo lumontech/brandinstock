@@ -8,7 +8,7 @@ import CompanyFormModal from '@/components/CompanyFormModal.vue'
 import ImportClientsModal from '@/components/ImportClientsModal.vue'
 import { useLookups } from '@/composables/useLookups'
 import { useAuthStore } from '@/stores/auth'
-import { companyTypes, formatDate, leadSources, money, segments } from '@/utils/format'
+import { companyTypes, formatDate, leadSources, leadStatuses, money, segments } from '@/utils/format'
 import type { Company, Paginated, Segment } from '@/types'
 
 /**
@@ -20,7 +20,7 @@ import type { Company, Paginated, Segment } from '@/types'
 const props = defineProps<{ mode: 'lead' | 'customer' }>()
 const isCustomers = props.mode === 'customer'
 
-type Editor = 'text' | 'email' | 'url' | 'segment' | 'type' | 'owner' | 'source'
+type Editor = 'text' | 'email' | 'url' | 'segment' | 'type' | 'owner' | 'source' | 'leadStatus'
 interface Column {
   key: string
   label: string
@@ -39,6 +39,7 @@ const C = ['customer'] as ('lead' | 'customer')[]
 const LC = ['lead', 'customer'] as ('lead' | 'customer')[]
 const ALL_COLUMNS: Column[] = [
   { key: 'name', label: isCustomers ? 'Cliente' : 'Lead', width: 240, sort: 'name', editor: 'text', show: LC },
+  { key: 'lead_status', label: 'Stato', width: 170, sort: 'lead_status', editor: 'leadStatus', show: L },
   { key: 'segment', label: 'Categoria', width: 120, sort: 'segment', editor: 'segment', show: LC },
   { key: 'source', label: 'Provenienza', width: 170, sort: 'source', editor: 'source', show: L },
   { key: 'email', label: 'Email', width: 210, editor: 'email', show: L },
@@ -64,9 +65,9 @@ const ALL_COLUMNS: Column[] = [
   { key: 'created_at', label: 'Inserito il', width: 120, sort: 'created_at', show: [] },
 ]
 
-const COLUMNS = ALL_COLUMNS.filter((c) => isCustomers || !c.customerOnly)
+const COLUMNS = ALL_COLUMNS.filter((c) => (isCustomers ? c.key !== 'lead_status' : !c.customerOnly))
 
-const GROUPS = { none: 'Nessuno', segment: 'Categoria', source: 'Provenienza', type: 'Tipologia', owner: 'Venditore', city: 'Città', billing: 'Dati di fatturazione' } as const
+const GROUPS = { none: 'Nessuno', lead_status: 'Stato', segment: 'Categoria', source: 'Provenienza', type: 'Tipologia', owner: 'Venditore', city: 'Città', billing: 'Dati di fatturazione' } as const
 type GroupBy = keyof typeof GROUPS
 const TABS: { key: Segment | ''; label: string }[] = [
   { key: '', label: 'Tutti' },
@@ -80,7 +81,7 @@ const router = useRouter()
 const { users, loadUsers } = useLookups()
 
 // --- Preferenze della vista (solo in questo browser) ---
-const PREFS_KEY = `bis.${props.mode}.grid.v2`
+const PREFS_KEY = `bis.${props.mode}.grid.v3`
 function readPrefs(): { hidden?: string[]; groupBy?: GroupBy; segment?: Segment | '' } {
   try {
     return JSON.parse(localStorage.getItem(PREFS_KEY) ?? '{}')
@@ -97,6 +98,7 @@ const segment = ref<Segment | ''>(prefs.segment ?? '')
 const q = ref('')
 const type = ref('')
 const source = ref('')
+const leadStatus = ref('')
 const ownerId = ref<number | null>(null)
 const sort = reactive({ key: 'name', direction: 'asc' as 'asc' | 'desc' })
 const rows = ref<Company[]>([])
@@ -132,6 +134,7 @@ async function load(page = 1) {
         status: props.mode,
         segment: segment.value || undefined,
         source: source.value || undefined,
+        lead_status: leadStatus.value || undefined,
         type: type.value || undefined,
         owner_id: ownerId.value || undefined,
         sort: sort.key,
@@ -156,7 +159,7 @@ onMounted(async () => {
 })
 
 let timer: number | undefined
-watch([q, type, source, ownerId, segment], () => {
+watch([q, type, source, leadStatus, ownerId, segment], () => {
   clearTimeout(timer)
   timer = window.setTimeout(() => load(), 250)
 })
@@ -187,6 +190,7 @@ function groupLabel(row: Company): string {
   switch (groupBy.value) {
     case 'segment': return segments[row.segment] ?? 'Senza categoria'
     case 'source': return row.source ? (leadSources[row.source] ?? row.source) : 'Provenienza non indicata'
+    case 'lead_status': return row.lead_status ? (leadStatuses[row.lead_status] ?? row.lead_status) : 'Stato da definire'
     case 'billing': return row.billing_complete ? 'Dati completi' : 'Dati mancanti'
     case 'type': return row.type ? (companyTypes[row.type] ?? row.type) : 'Senza tipologia'
     case 'owner': return row.owner?.name ?? 'Senza venditore'
@@ -219,6 +223,7 @@ function display(row: Company, key: string): string {
   switch (key) {
     case 'segment': return segments[row.segment] ?? ''
     case 'source': return row.source ? (leadSources[row.source] ?? row.source) : ''
+    case 'lead_status': return row.lead_status ? (leadStatuses[row.lead_status] ?? row.lead_status) : ''
     case 'billing_complete': return row.billing_complete ? 'Completi' : 'Mancanti'
     case 'won_value': return row.won_value ? money(row.won_value) : ''
     case 'converted_at': return formatDate(row.converted_at)
@@ -393,6 +398,10 @@ const isEditing = (row: Company, col: Column) => editing.value?.id === row.id &&
         <option value="">Tutte le tipologie</option>
         <option v-for="(label, key) in companyTypes" :key="key" :value="key">{{ label }}</option>
       </select>
+      <select v-if="!isCustomers" v-model="leadStatus" class="input narrow" aria-label="Stato">
+        <option value="">Tutti gli stati</option>
+        <option v-for="(label, key) in leadStatuses" :key="key" :value="key">{{ label }}</option>
+      </select>
       <select v-model="source" class="input narrow" aria-label="Provenienza">
         <option value="">Tutte le provenienze</option>
         <option v-for="(label, key) in leadSources" :key="key" :value="key">{{ label }}</option>
@@ -405,7 +414,7 @@ const isEditing = (row: Company, col: Column) => editing.value?.id === row.id &&
         Raggruppa
         <select v-model="groupBy" class="input narrow" aria-label="Raggruppa per">
           <template v-for="(label, key) in GROUPS" :key="key">
-            <option v-if="isCustomers || key !== 'billing'" :value="key">{{ label }}</option>
+            <option v-if="isCustomers ? key !== 'lead_status' : key !== 'billing'" :value="key">{{ label }}</option>
           </template>
         </select>
       </label>
@@ -491,6 +500,10 @@ const isEditing = (row: Company, col: Column) => editing.value?.id === row.id &&
                     <option value="">—</option>
                     <option v-for="(label, key) in leadSources" :key="key" :value="key">{{ label }}</option>
                   </select>
+                  <select v-else-if="col.editor === 'leadStatus'" v-model="draft" class="cell-editor" @change="commitEdit(row)" @blur="cancelEdit" @keydown="onKey($event, row)">
+                    <option value="">—</option>
+                    <option v-for="(label, key) in leadStatuses" :key="key" :value="key">{{ label }}</option>
+                  </select>
                   <select v-else-if="col.editor === 'type'" v-model="draft" class="cell-editor" @change="commitEdit(row)" @blur="cancelEdit" @keydown="onKey($event, row)">
                     <option value="">—</option>
                     <option v-for="(label, key) in companyTypes" :key="key" :value="key">{{ label }}</option>
@@ -508,6 +521,7 @@ const isEditing = (row: Company, col: Column) => editing.value?.id === row.id &&
                   />
                 </template>
                 <span v-else-if="col.key === 'segment'" class="pill" :class="`seg-${row.segment}`">{{ display(row, col.key) }}</span>
+                <span v-else-if="col.key === 'lead_status' && row.lead_status" class="pill" :class="`ls-${row.lead_status}`">{{ display(row, col.key) }}</span>
                 <span v-else-if="col.key === 'billing_complete'" class="pill" :class="row.billing_complete ? 'bill-ok' : 'bill-missing'">{{ display(row, col.key) }}</span>
                 <span v-else class="value">{{ display(row, col.key) }}</span>
               </div>
@@ -599,6 +613,14 @@ const isEditing = (row: Company, col: Column) => editing.value?.id === row.id &&
 .subtitle { margin: 2px 0 0; }
 .bill-ok { background: #dcfce7; color: #166534; }
 .bill-missing { background: #fee2e2; color: #991b1b; }
+.ls-nuovo { background: #dbeafe; color: #1e40af; }
+.ls-da_richiamare { background: #f3e8ff; color: #6b21a8; }
+.ls-email_inviata { background: #ffedd5; color: #9a3412; }
+.ls-appuntamento { background: #fee2e2; color: #991b1b; }
+.ls-in_attesa { background: #fef9c3; color: #854d0e; }
+.ls-qualificato { background: #cffafe; color: #155e75; }
+.ls-prospect { background: #ccfbf1; color: #115e59; }
+.ls-non_interessato { background: #f3f4f6; color: #6b7280; }
 .seg-b2b { background: #dbeafe; color: #1e40af; }
 .seg-b2c { background: #dcfce7; color: #166534; }
 .seg-franchising { background: #ede9fe; color: #5b21b6; }

@@ -4,7 +4,7 @@ import AppModal from './AppModal.vue'
 import { errorMessage, http } from '@/api/http'
 import { useLookups } from '@/composables/useLookups'
 import { useAuthStore } from '@/stores/auth'
-import { companyTypes, leadSources, segments } from '@/utils/format'
+import { companyTypes, leadSources, leadStatuses, segments } from '@/utils/format'
 import type { Company } from '@/types'
 
 /** Creazione e modifica di un lead o cliente: in evidenza solo i campi essenziali. */
@@ -19,6 +19,7 @@ const form = reactive({
   name: c?.name ?? '',
   segment: c?.segment ?? props.segment ?? 'b2b',
   source: c?.source ?? '',
+  lead_status: c?.lead_status ?? 'nuovo',
   type: c?.type ?? '',
   city: c?.city ?? '',
   email: c?.email ?? '',
@@ -79,6 +80,13 @@ async function submit() {
           <select id="co-source" v-model="form.source" class="input">
             <option value="">—</option>
             <option v-for="(label, key) in leadSources" :key="key" :value="key">{{ label }}</option>
+          </select>
+        </div>
+        <div v-if="!isCustomer" class="field">
+          <label for="co-lstatus">Stato del lead</label>
+          <select id="co-lstatus" v-model="form.lead_status" class="input">
+            <option value="">—</option>
+            <option v-for="(label, key) in leadStatuses" :key="key" :value="key">{{ label }}</option>
           </select>
         </div>
         <div class="field"><label for="co-email">Email</label><input id="co-email" v-model="form.email" class="input" type="email" /></div>
