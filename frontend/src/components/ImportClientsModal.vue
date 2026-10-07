@@ -116,6 +116,8 @@ function onFile(event: Event) {
   })
 }
 
+const PLACEHOLDER_NAMES = ['', 'nessuna', 'nessuno', 'n a', 'nd', 'n d', 'na', 'x']
+
 const unmapped = computed(() => {
   const used = new Set(Object.values(mapping.value).filter(Boolean))
   return headers.value.filter((h) => !used.has(h))
@@ -133,8 +135,12 @@ function buildRow(source: Record<string, string>) {
       .map(([h, v]) => `${h}: ${v}`)
     if (extra.length) row.notes = [row.notes, ...extra].filter(Boolean).join('\n')
   }
-  // Senza nome ma con email: uso l'email come nome, così il contatto non va perso.
-  if (!row.name?.trim() && row.email) row.name = row.email
+  // Senza nome (o con un segnaposto come "nessuna"): uso una colonna con "nome" non abbinata
+  // (es. "Nome e Cognome"), poi email o telefono, così il contatto non va perso.
+  if (PLACEHOLDER_NAMES.includes(norm(row.name ?? ''))) {
+    const nameColumn = unmapped.value.find((h) => norm(h).includes('nome') && !PLACEHOLDER_NAMES.includes(norm(source[h] ?? '')))
+    row.name = (nameColumn && source[nameColumn]) || row.email || row.phone || null
+  }
   if (!row.segment) row.segment = defaultSegment.value
   return row
 }
