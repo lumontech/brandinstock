@@ -7,6 +7,7 @@ use App\Models\AuditLog;
 use App\Models\Company;
 use App\Models\Contact;
 use App\Models\User;
+use App\Support\ItalianCity;
 use App\Support\LeadSource;
 use App\Support\LeadStatus;
 use Illuminate\Database\QueryException;
@@ -24,7 +25,7 @@ use Illuminate\Validation\Rule;
  */
 class CompanyImportController extends Controller
 {
-    private const COMPANY_FIELDS = ['name', 'segment', 'source', 'lead_status', 'type', 'vat_number', 'tax_code', 'city', 'province', 'country', 'address', 'email', 'phone', 'website', 'notes',
+    private const COMPANY_FIELDS = ['name', 'segment', 'source', 'lead_status', 'contact_person', 'type', 'vat_number', 'tax_code', 'city', 'province', 'country', 'address', 'email', 'phone', 'website', 'notes',
         'billing_name', 'billing_address', 'billing_zip', 'billing_city', 'billing_province', 'sdi_code', 'pec', 'iban', 'payment_terms'];
 
     public function __invoke(Request $request): JsonResponse
@@ -174,9 +175,9 @@ class CompanyImportController extends Controller
                 $row['notes'] = trim(($row['notes'] ?? '')."\nStato: {$original}");
             }
         }
-        if (empty($row['lead_status'])) {
-            // Nessuno stato: vale quello predefinito del modello ("nuovo").
-            unset($row['lead_status']);
+        if (array_key_exists('lead_status', $row) && empty($row['lead_status'])) {
+            // Stato vuoto nel file: resta vuoto, come in Airtable.
+            $row['lead_status'] = null;
         }
         if (! empty($row['sdi_code'])) {
             $sdi = strtoupper(preg_replace('/\s+/', '', (string) $row['sdi_code']));
@@ -215,6 +216,13 @@ class CompanyImportController extends Controller
         if (! empty($row['city']) && mb_strlen($row['city']) > 100) {
             $row['notes'] = trim(($row['notes'] ?? '')."\nCittà: {$row['city']}");
             $row['city'] = Str::limit(trim(explode(',', $row['city'])[0]), 100, '');
+        }
+        if (! empty($row['city'])) {
+            $city = ItalianCity::normalize($row['city']);
+            $row['city'] = $city['city'];
+            if ($city['province'] && empty($row['province'])) {
+                $row['province'] = $city['province'];
+            }
         }
         if (! empty($row['phone']) && mb_strlen($row['phone']) > 40) {
             $row['notes'] = trim(($row['notes'] ?? '')."\nTelefono: {$row['phone']}");
@@ -271,6 +279,7 @@ class CompanyImportController extends Controller
             'phone' => ['nullable', 'string', 'max:40'],
             'website' => ['nullable', 'url:http,https', 'max:255'],
             'notes' => ['nullable', 'string', 'max:5000'],
+            'contact_person' => ['nullable', 'string', 'max:150'],
             'billing_name' => ['nullable', 'string', 'max:255'],
             'billing_address' => ['nullable', 'string', 'max:255'],
             'billing_zip' => ['nullable', 'string', 'max:10'],

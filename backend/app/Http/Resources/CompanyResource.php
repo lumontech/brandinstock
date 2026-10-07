@@ -44,6 +44,7 @@ class CompanyResource extends JsonResource
             'phone' => $this->phone,
             'website' => $this->website,
             'notes' => $this->notes,
+            'contact_person' => $this->contact_person,
             'owner' => new OwnerResource($this->whenLoaded('owner')),
             'deals_count' => $this->whenCounted('deals'),
             'contacts_count' => $this->whenCounted('contacts'),

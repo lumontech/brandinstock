@@ -77,6 +77,7 @@ export interface Company {
   status: 'lead' | 'customer'
   source: string | null
   lead_status?: string | null
+  contact_person?: string | null
   converted_at?: string | null
   vat_number: string | null
   tax_code: string | null

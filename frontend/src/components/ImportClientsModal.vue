@@ -20,6 +20,7 @@ const FIELDS: Field[] = [
   { key: 'name', label: 'Nome / Ragione sociale *', group: 'cliente', aliases: ['nome', 'name', 'ragione sociale', 'azienda', 'cliente', 'company', 'denominazione', 'negozio'] },
   { key: 'segment', label: 'Categoria (B2B, B2C, Franchising)', group: 'cliente', aliases: ['categoria', 'segmento', 'segment', 'tipo cliente', 'canale', 'b2b b2c'] },
   { key: 'source', label: 'Provenienza lead', group: 'cliente', aliases: ['provenienza', 'provenienza lead', 'provenienza leads', 'fonte', 'origine', 'origine lead', 'lead source', 'source', 'canale di acquisizione', 'come ci ha conosciuto'] },
+  { key: 'contact_person', label: 'Nome e cognome (persona)', group: 'cliente', aliases: ['nome e cognome', 'nome cognome', 'nominativo', 'titolare', 'persona di riferimento'] },
   { key: 'lead_status', label: 'Stato del lead', group: 'cliente', aliases: ['stato', 'stato lead', 'stato del lead', 'fase', 'status'] },
   { key: 'type', label: 'Tipologia (boutique, outlet…)', group: 'cliente', aliases: ['tipologia', 'tipo', 'type', 'tipo negozio'] },
   { key: 'vat_number', label: 'Partita IVA', group: 'cliente', aliases: ['partita iva', 'p iva', 'piva', 'p.iva', 'vat', 'vat number', 'iva'] },
@@ -140,7 +141,7 @@ function buildRow(source: Record<string, string>) {
   // (es. "Nome e Cognome"), poi email o telefono, così il contatto non va perso.
   if (PLACEHOLDER_NAMES.includes(norm(row.name ?? ''))) {
     const nameColumn = unmapped.value.find((h) => norm(h).includes('nome') && !PLACEHOLDER_NAMES.includes(norm(source[h] ?? '')))
-    row.name = (nameColumn && source[nameColumn]) || row.email || row.phone || null
+    row.name = row.contact_person || (nameColumn && source[nameColumn]) || row.email || row.phone || null
   }
   if (!row.segment) row.segment = defaultSegment.value
   return row

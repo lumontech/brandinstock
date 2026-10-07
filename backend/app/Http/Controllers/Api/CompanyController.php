@@ -8,6 +8,7 @@ use App\Http\Resources\CompanyResource;
 use App\Models\Company;
 use App\Models\PipelineStage;
 use App\Models\User;
+use App\Support\ItalianCity;
 use App\Support\LeadSource;
 use App\Support\LeadStatus;
 use Illuminate\Http\JsonResponse;
@@ -159,12 +160,22 @@ class CompanyController extends Controller
             'phone' => ['nullable', 'string', 'max:40'],
             'website' => ['nullable', 'url:http,https', 'max:255'],
             'notes' => ['nullable', 'string', 'max:5000'],
+            'contact_person' => ['nullable', 'string', 'max:150'],
         ], [
             'vat_number.unique' => 'Questa partita IVA è già presente nel CRM: contatta un responsabile.',
             'tax_code.regex' => 'Il codice fiscale non è valido.',
             'sdi_code.regex' => 'Il codice destinatario SDI ha 6 o 7 caratteri.',
             'iban.regex' => "L'IBAN non è valido.",
         ]);
+
+        // Città uniforme ("ct" → Catania) e provincia ricavata se non indicata.
+        if (array_key_exists('city', $data)) {
+            $city = ItalianCity::normalize($data['city']);
+            $data['city'] = $city['city'];
+            if ($city['province'] && empty($data['province'])) {
+                $data['province'] = $city['province'];
+            }
+        }
 
         // Normalizzato qui (non con un mutator, che scavalcherebbe la cifratura del campo).
         if (! empty($data['iban'])) {

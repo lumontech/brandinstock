@@ -7,8 +7,9 @@ use Illuminate\Support\Str;
 /** Stato di lavorazione di un lead (le etichette sono nel frontend). */
 final class LeadStatus
 {
+    /** Gli stessi stati del campo "Stato" di Airtable, nello stesso ordine. */
     public const ALL = [
-        'nuovo', 'da_richiamare', 'email_inviata', 'appuntamento', 'in_attesa', 'qualificato', 'prospect', 'non_interessato',
+        'nuovo', 'qualificato', 'prospect', 'cliente', 'non_interessato', 'in_attesa', 'email_inviata', 'appuntamento', 'da_richiamare',
     ];
 
     /** Parole con cui lo stato compare negli export (es. il campo "Stato" di Airtable). */
@@ -20,6 +21,7 @@ final class LeadStatus
         'in_attesa' => ['in attesa', 'attesa', 'in sospeso', 'sospeso'],
         'qualificato' => ['qualificato', 'qualificata', 'qualified'],
         'prospect' => ['prospect', 'potenziale'],
+        'cliente' => ['cliente', 'acquisito', 'vinto'],
         'non_interessato' => ['non interessato', 'non interessata', 'perso', 'not interested'],
     ];
 

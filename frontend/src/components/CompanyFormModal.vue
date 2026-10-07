@@ -4,7 +4,7 @@ import AppModal from './AppModal.vue'
 import { errorMessage, http } from '@/api/http'
 import { useLookups } from '@/composables/useLookups'
 import { useAuthStore } from '@/stores/auth'
-import { companyTypes, leadSources, leadStatuses, segments } from '@/utils/format'
+import { companyTypes, italianCities, leadSources, leadStatuses, segments } from '@/utils/format'
 import type { Company } from '@/types'
 
 /** Creazione e modifica di un lead o cliente: in evidenza solo i campi essenziali. */
@@ -20,6 +20,7 @@ const form = reactive({
   segment: c?.segment ?? props.segment ?? 'b2b',
   source: c?.source ?? '',
   lead_status: c?.lead_status ?? 'nuovo',
+  contact_person: c?.contact_person ?? '',
   type: c?.type ?? '',
   city: c?.city ?? '',
   email: c?.email ?? '',
@@ -69,6 +70,10 @@ async function submit() {
           <label for="co-name">{{ form.segment === 'b2c' ? 'Nome e cognome' : 'Ragione sociale / Nome' }} *</label>
           <input id="co-name" v-model="form.name" class="input" required maxlength="255" />
         </div>
+        <div class="field full">
+          <label for="co-person">Nome e cognome (persona di riferimento)</label>
+          <input id="co-person" v-model="form.contact_person" class="input" maxlength="150" />
+        </div>
         <div class="field">
           <label for="co-segment">Categoria</label>
           <select id="co-segment" v-model="form.segment" class="input">
@@ -98,7 +103,8 @@ async function submit() {
             <option v-for="(label, key) in companyTypes" :key="key" :value="key">{{ label }}</option>
           </select>
         </div>
-        <div class="field"><label for="co-city">Città</label><input id="co-city" v-model="form.city" class="input" maxlength="100" /></div>
+        <div class="field"><label for="co-city">Città</label><input id="co-city" v-model="form.city" class="input" maxlength="100" list="co-city-options" placeholder="Scegli o scrivi (es. CT)" />
+          <datalist id="co-city-options"><option v-for="city in italianCities" :key="city" :value="city" /></datalist></div>
         <div v-if="auth.seesEverything" class="field">
           <label for="co-owner">Venditore</label>
           <select id="co-owner" v-model="form.owner_id" class="input">

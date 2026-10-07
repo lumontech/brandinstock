@@ -136,6 +136,7 @@ onMounted(load)
       <div v-if="tab === 'details'" class="stack">
         <dl class="details">
           <dt>{{ company.segment === 'b2c' ? 'Nome e cognome' : 'Ragione sociale' }}</dt><dd>{{ company.name }}</dd>
+          <dt>Nome e cognome</dt><dd>{{ company.contact_person || '—' }}</dd>
           <dt>Categoria</dt><dd>{{ segments[company.segment] }}</dd>
           <dt v-if="company.status === 'lead'">Stato del lead</dt><dd v-if="company.status === 'lead'">{{ company.lead_status ? leadStatuses[company.lead_status] : '—' }}</dd>
           <dt>Provenienza lead</dt><dd>{{ company.source ? leadSources[company.source] : '—' }}</dd>

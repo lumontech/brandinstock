@@ -8,7 +8,7 @@ import CompanyFormModal from '@/components/CompanyFormModal.vue'
 import ImportClientsModal from '@/components/ImportClientsModal.vue'
 import { useLookups } from '@/composables/useLookups'
 import { useAuthStore } from '@/stores/auth'
-import { companyTypes, formatDate, leadSources, leadStatuses, money, segments } from '@/utils/format'
+import { companyTypes, formatDate, italianCities, leadSources, leadStatuses, money, segments } from '@/utils/format'
 import type { Company, Paginated, Segment } from '@/types'
 
 /**
@@ -20,7 +20,7 @@ import type { Company, Paginated, Segment } from '@/types'
 const props = defineProps<{ mode: 'lead' | 'customer' }>()
 const isCustomers = props.mode === 'customer'
 
-type Editor = 'text' | 'email' | 'url' | 'segment' | 'type' | 'owner' | 'source' | 'leadStatus'
+type Editor = 'text' | 'city' | 'email' | 'url' | 'segment' | 'type' | 'owner' | 'source' | 'leadStatus'
 interface Column {
   key: string
   label: string
@@ -39,13 +39,14 @@ const C = ['customer'] as ('lead' | 'customer')[]
 const LC = ['lead', 'customer'] as ('lead' | 'customer')[]
 const ALL_COLUMNS: Column[] = [
   { key: 'name', label: isCustomers ? 'Cliente' : 'Lead', width: 240, sort: 'name', editor: 'text', show: LC },
+  { key: 'contact_person', label: 'Nome e cognome', width: 180, editor: 'text', show: LC },
   { key: 'lead_status', label: 'Stato', width: 170, sort: 'lead_status', editor: 'leadStatus', show: L },
   { key: 'segment', label: 'Categoria', width: 120, sort: 'segment', editor: 'segment', show: LC },
   { key: 'source', label: 'Provenienza', width: 170, sort: 'source', editor: 'source', show: L },
   { key: 'email', label: 'Email', width: 210, editor: 'email', show: L },
   { key: 'phone', label: 'Telefono', width: 150, editor: 'text', show: L },
   { key: 'type', label: 'Tipologia', width: 130, sort: 'type', editor: 'type', show: L },
-  { key: 'city', label: 'Città', width: 140, sort: 'city', editor: 'text', show: L },
+  { key: 'city', label: 'Città', width: 150, sort: 'city', editor: 'city', show: L },
   { key: 'vat_number', label: 'Partita IVA', width: 150, sort: 'vat_number', editor: 'text', show: C },
   { key: 'billing_complete', label: 'Fatturazione', width: 120, show: C, customerOnly: true },
   { key: 'sdi_code', label: 'Codice SDI', width: 110, sort: 'sdi_code', editor: 'text', show: C, customerOnly: true },
@@ -81,7 +82,7 @@ const router = useRouter()
 const { users, loadUsers } = useLookups()
 
 // --- Preferenze della vista (solo in questo browser) ---
-const PREFS_KEY = `bis.${props.mode}.grid.v3`
+const PREFS_KEY = `bis.${props.mode}.grid.v4`
 function readPrefs(): { hidden?: string[]; groupBy?: GroupBy; segment?: Segment | '' } {
   try {
     return JSON.parse(localStorage.getItem(PREFS_KEY) ?? '{}')
@@ -430,6 +431,7 @@ const isEditing = (row: Company, col: Column) => editing.value?.id === row.id &&
     </div>
 
     <div v-if="error" class="alert alert-error" role="alert">{{ error }}</div>
+    <datalist id="city-options"><option v-for="c in italianCities" :key="c" :value="c" /></datalist>
     <div v-if="notice" class="alert alert-success" role="status">{{ notice }}</div>
 
     <div v-if="selected.size" class="bulk-bar" role="toolbar" aria-label="Azioni sui selezionati">
@@ -512,6 +514,15 @@ const isEditing = (row: Company, col: Column) => editing.value?.id === row.id &&
                     <option v-for="u in users" :key="u.id" :value="String(u.id)">{{ u.name }}</option>
                   </select>
                   <input
+                    v-else-if="col.editor === 'city'"
+                    v-model="draft"
+                    class="cell-editor"
+                    list="city-options"
+                    placeholder="Scegli o scrivi (es. CT)"
+                    @keydown="onKey($event, row)"
+                    @blur="commitEdit(row)"
+                  />
+                  <input
                     v-else
                     v-model="draft"
                     class="cell-editor"
@@ -522,6 +533,7 @@ const isEditing = (row: Company, col: Column) => editing.value?.id === row.id &&
                 </template>
                 <span v-else-if="col.key === 'segment'" class="pill" :class="`seg-${row.segment}`">{{ display(row, col.key) }}</span>
                 <span v-else-if="col.key === 'lead_status' && row.lead_status" class="pill" :class="`ls-${row.lead_status}`">{{ display(row, col.key) }}</span>
+                <span v-else-if="col.key === 'city' && row.city" class="pill city">{{ row.city }}<small v-if="row.province"> {{ row.province }}</small></span>
                 <span v-else-if="col.key === 'billing_complete'" class="pill" :class="row.billing_complete ? 'bill-ok' : 'bill-missing'">{{ display(row, col.key) }}</span>
                 <span v-else class="value">{{ display(row, col.key) }}</span>
               </div>
@@ -613,14 +625,18 @@ const isEditing = (row: Company, col: Column) => editing.value?.id === row.id &&
 .subtitle { margin: 2px 0 0; }
 .bill-ok { background: #dcfce7; color: #166534; }
 .bill-missing { background: #fee2e2; color: #991b1b; }
-.ls-nuovo { background: #dbeafe; color: #1e40af; }
-.ls-da_richiamare { background: #f3e8ff; color: #6b21a8; }
-.ls-email_inviata { background: #ffedd5; color: #9a3412; }
-.ls-appuntamento { background: #fee2e2; color: #991b1b; }
-.ls-in_attesa { background: #fef9c3; color: #854d0e; }
-.ls-qualificato { background: #cffafe; color: #155e75; }
-.ls-prospect { background: #ccfbf1; color: #115e59; }
-.ls-non_interessato { background: #f3f4f6; color: #6b7280; }
+/* Stessi colori del campo "Stato" di Airtable. */
+.ls-nuovo { background: #cfdfff; color: #102046; }
+.ls-qualificato { background: #c2f5e9; color: #0b3a32; }
+.ls-prospect { background: #c2f5e9; color: #014d3d; }
+.ls-cliente { background: #d1f7c4; color: #0b3a12; }
+.ls-non_interessato { background: #ffdaf6; color: #4c0c3c; }
+.ls-in_attesa { background: #ffeab6; color: #3b2501; }
+.ls-email_inviata { background: #fee2d5; color: #4b1a0b; }
+.ls-appuntamento { background: #ffdce5; color: #4c0c1c; }
+.ls-da_richiamare { background: #ede2fe; color: #2b1b4c; }
+.pill.city { background: #eef2f7; color: #334155; font-weight: 500; }
+.pill.city small { color: #94a3b8; font-weight: 600; }
 .seg-b2b { background: #dbeafe; color: #1e40af; }
 .seg-b2c { background: #dcfce7; color: #166534; }
 .seg-franchising { background: #ede9fe; color: #5b21b6; }

@@ -11,7 +11,7 @@ use Illuminate\Database\Eloquent\Model;
 use Illuminate\Database\Eloquent\Relations\HasMany;
 use Illuminate\Database\Eloquent\SoftDeletes;
 
-#[Fillable(['name', 'segment', 'vat_number', 'tax_code', 'type', 'city', 'province', 'country', 'address', 'email', 'phone', 'website', 'notes', 'source', 'lead_status',
+#[Fillable(['name', 'segment', 'vat_number', 'tax_code', 'type', 'city', 'province', 'country', 'address', 'email', 'phone', 'website', 'notes', 'source', 'lead_status', 'contact_person',
     'billing_name', 'billing_address', 'billing_zip', 'billing_city', 'billing_province', 'billing_country',
     'sdi_code', 'pec', 'iban', 'payment_terms', 'billing_notes'])]
 class Company extends Model
@@ -44,6 +44,7 @@ class Company extends Model
             'email' => 'encrypted',
             'phone' => 'encrypted',
             'notes' => 'encrypted',
+            'contact_person' => 'encrypted',
         ];
     }
 

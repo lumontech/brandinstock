@@ -32,7 +32,7 @@ class LeadStatusTest extends TestCase
         ]])->assertOk()->assertJson(['created' => 4]);
 
         $this->assertSame(
-            ['Uno' => 'nuovo', 'Due' => 'in_attesa', 'Tre' => 'nuovo', 'Quattro' => 'nuovo'],
+            ['Uno' => 'nuovo', 'Due' => 'in_attesa', 'Tre' => null, 'Quattro' => 'nuovo'],
             Company::pluck('lead_status', 'name')->all(),
         );
         $this->assertStringContainsString('Stato: Stato strano', Company::where('name', 'Tre')->first()->notes);
@@ -62,5 +62,21 @@ class LeadStatusTest extends TestCase
         $this->assertNull($b->fresh()->lead_status);
         $this->assertNotSame('Nessuno stato', DB::table('companies')->where('id', $b->id)->value('notes'), 'le note restano cifrate');
         $this->assertSame('Nessuno stato', Crypt::decryptString(DB::table('companies')->where('id', $b->id)->value('notes')));
+    }
+
+    public function test_contact_person_is_stored_encrypted_and_recovered_from_notes(): void
+    {
+        $user = User::factory()->create();
+        $id = $this->actingAs($user)->postJson('/api/companies', ['name' => 'Alfa', 'contact_person' => 'Ada Rossi'])
+            ->assertJsonPath('data.contact_person', 'Ada Rossi')->json('data.id');
+        $this->assertStringNotContainsString('Ada', (string) DB::table('companies')->where('id', $id)->value('contact_person'));
+
+        $old = Company::factory()->for($user, 'owner')->create(['notes' => "Nome e Cognome: Mario Bianchi\nStato: Prospect"]);
+        $migration = require database_path('migrations/2026_10_07_110000_add_contact_person_to_companies_table.php');
+        $migration->down();
+        $migration->up();
+
+        $this->assertSame('Mario Bianchi', $old->fresh()->contact_person);
+        $this->assertNull(Company::find($id)->contact_person, 'senza riga nelle note resta vuoto');
     }
 }
