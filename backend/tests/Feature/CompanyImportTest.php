@@ -27,8 +27,8 @@ class CompanyImportTest extends TestCase
 
         $this->actingAs($user)->postJson('/api/companies/import', ['rows' => $this->rows(), 'duplicates' => 'skip', 'dry_run' => true])
             ->assertOk()
-            ->assertJson(['created' => 3, 'contacts_created' => 1, 'dry_run' => true])
-            ->assertJsonCount(2, 'errors')
+            ->assertJson(['created' => 4, 'contacts_created' => 1, 'dry_run' => true])
+            ->assertJsonCount(1, 'errors')
             ->assertJsonPath('errors.0.row', 3);
 
         $this->assertSame(0, Company::count());
@@ -40,7 +40,10 @@ class CompanyImportTest extends TestCase
         $user = User::factory()->create();
 
         $this->actingAs($user)->postJson('/api/companies/import', ['rows' => $this->rows(), 'duplicates' => 'skip'])
-            ->assertOk()->assertJson(['created' => 3, 'contacts_created' => 1, 'dry_run' => false]);
+            ->assertOk()->assertJson(['created' => 4, 'contacts_created' => 1, 'dry_run' => false]);
+
+        // Un'email non valida non blocca la riga: finisce nelle note.
+        $this->assertStringContainsString('non-email', Company::where('name', 'Email sbagliata')->first()->notes);
 
         $aurora = Company::where('name', 'Boutique Aurora')->first();
         $this->assertSame('b2b', $aurora->segment);

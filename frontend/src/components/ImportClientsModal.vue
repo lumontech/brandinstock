@@ -19,16 +19,16 @@ interface Field { key: string; label: string; aliases: string[]; group: 'cliente
 const FIELDS: Field[] = [
   { key: 'name', label: 'Nome / Ragione sociale *', group: 'cliente', aliases: ['nome', 'name', 'ragione sociale', 'azienda', 'cliente', 'company', 'denominazione', 'negozio'] },
   { key: 'segment', label: 'Categoria (B2B, B2C, Franchising)', group: 'cliente', aliases: ['categoria', 'segmento', 'segment', 'tipo cliente', 'canale', 'b2b b2c'] },
-  { key: 'source', label: 'Provenienza lead', group: 'cliente', aliases: ['provenienza', 'provenienza lead', 'fonte', 'origine', 'origine lead', 'lead source', 'source', 'canale di acquisizione', 'come ci ha conosciuto'] },
+  { key: 'source', label: 'Provenienza lead', group: 'cliente', aliases: ['provenienza', 'provenienza lead', 'provenienza leads', 'fonte', 'origine', 'origine lead', 'lead source', 'source', 'canale di acquisizione', 'come ci ha conosciuto'] },
   { key: 'type', label: 'Tipologia (boutique, outlet…)', group: 'cliente', aliases: ['tipologia', 'tipo', 'type', 'tipo negozio'] },
   { key: 'vat_number', label: 'Partita IVA', group: 'cliente', aliases: ['partita iva', 'p iva', 'piva', 'p.iva', 'vat', 'vat number', 'iva'] },
   { key: 'tax_code', label: 'Codice fiscale', group: 'cliente', aliases: ['codice fiscale', 'cf', 'c f', 'fiscal code', 'tax code'] },
   { key: 'email', label: 'Email', group: 'cliente', aliases: ['email', 'e-mail', 'mail', 'email azienda'] },
-  { key: 'phone', label: 'Telefono', group: 'cliente', aliases: ['telefono', 'tel', 'phone', 'cellulare', 'numero'] },
+  { key: 'phone', label: 'Telefono', group: 'cliente', aliases: ['telefono', 'tel', 'phone', 'cellulare', 'numero', 'numero di telefono', 'numero telefono', 'cellulare referente'] },
   { key: 'address', label: 'Indirizzo', group: 'cliente', aliases: ['indirizzo', 'address', 'via', 'sede'] },
   { key: 'city', label: 'Città', group: 'cliente', aliases: ['citta', 'città', 'city', 'comune', 'localita'] },
   { key: 'province', label: 'Provincia', group: 'cliente', aliases: ['provincia', 'prov', 'province'] },
-  { key: 'country', label: 'Paese', group: 'cliente', aliases: ['paese', 'nazione', 'country', 'stato'] },
+  { key: 'country', label: 'Paese', group: 'cliente', aliases: ['paese', 'nazione', 'country'] },
   { key: 'website', label: 'Sito web', group: 'cliente', aliases: ['sito', 'sito web', 'website', 'web', 'url'] },
   { key: 'notes', label: 'Note', group: 'cliente', aliases: ['note', 'notes', 'descrizione', 'commenti'] },
   { key: 'owner_email', label: 'Email del venditore assegnato', group: 'cliente', aliases: ['venditore', 'commerciale', 'agente', 'owner', 'assegnato a', 'email venditore'], managersOnly: true },
@@ -63,6 +63,10 @@ const duplicates = ref<'skip' | 'update'>('skip')
 const error = ref('')
 const busy = ref(false)
 const progress = ref(0)
+// Le colonne non abbinate finiscono nelle note, così non si perde nessuna informazione.
+const extraToNotes = ref(true)
+const airtableLink = ref('')
+const airtableToken = ref('')
 
 interface Result { created: number; updated: number; skipped: number; contacts_created: number; errors: { row: number; messages: string[] }[] }
 const check = ref<Result | null>(null)
@@ -112,13 +116,60 @@ function onFile(event: Event) {
   })
 }
 
+const unmapped = computed(() => {
+  const used = new Set(Object.values(mapping.value).filter(Boolean))
+  return headers.value.filter((h) => !used.has(h))
+})
+
 function buildRow(source: Record<string, string>) {
   const row: Record<string, string | null> = {}
   for (const [key, header] of Object.entries(mapping.value)) {
     if (header) row[key] = source[header] ?? null
   }
+  if (extraToNotes.value) {
+    const extra = unmapped.value
+      .map((h) => [h, String(source[h] ?? '').trim()])
+      .filter(([, v]) => v)
+      .map(([h, v]) => `${h}: ${v}`)
+    if (extra.length) row.notes = [row.notes, ...extra].filter(Boolean).join('\n')
+  }
+  // Senza nome ma con email: uso l'email come nome, così il contatto non va perso.
+  if (!row.name?.trim() && row.email) row.name = row.email
   if (!row.segment) row.segment = defaultSegment.value
   return row
+}
+
+/** Legge la tabella direttamente da Airtable (tramite il server del CRM) invece che da un file. */
+async function loadAirtable() {
+  error.value = ''
+  const ids = airtableLink.value.match(/(app[A-Za-z0-9]{14})\/(tbl[A-Za-z0-9]{14})(?:\/(viw[A-Za-z0-9]{14}))?/)
+  if (!ids) {
+    error.value = "Incolla il link della tabella di Airtable, come appare nella barra del browser (contiene 'app…/tbl…')."
+    return
+  }
+  busy.value = true
+  try {
+    const { data: res } = await http.post<{ headers: string[]; rows: Record<string, string>[] }>(
+      '/airtable/records',
+      { token: airtableToken.value.trim(), base_id: ids[1], table_id: ids[2], view_id: ids[3] ?? null },
+      { timeout: 180000 },
+    )
+    if (!res.rows.length) {
+      error.value = 'La tabella di Airtable non contiene record.'
+      return
+    }
+    headers.value = res.headers
+    data.value = res.rows
+    fileName.value = 'Airtable'
+    airtableToken.value = ''
+    guessMapping()
+    check.value = null
+    step.value = 'map'
+  } catch (e) {
+    error.value = errorMessage(e)
+  } finally {
+    busy.value = false
+  }
 }
 
 const preview = computed(() => data.value.slice(0, 5).map(buildRow))
@@ -195,6 +246,25 @@ async function importAll() {
           <input type="file" accept=".csv,text/csv" @change="onFile" />
           <span><strong>Scegli il file CSV</strong><br /><span class="muted small">oppure trascinalo qui</span></span>
         </label>
+
+        <form class="airtable stack" @submit.prevent="loadAirtable">
+          <h3 class="map-title">Oppure leggi direttamente da Airtable</h3>
+          <div class="field">
+            <label for="at-link">Link della tabella (copialo dalla barra del browser)</label>
+            <input id="at-link" v-model="airtableLink" class="input" placeholder="https://airtable.com/app…/tbl…/viw…" required />
+          </div>
+          <div class="field">
+            <label for="at-token">Token di accesso Airtable</label>
+            <input id="at-token" v-model="airtableToken" class="input" type="password" autocomplete="off" placeholder="pat…" required />
+            <span class="muted small">
+              Crealo su airtable.com/create/tokens con il permesso <strong>data.records:read</strong> e accesso alla base.
+              Viene usato solo per questa lettura e non viene salvato.
+            </span>
+          </div>
+          <div class="toolbar" style="justify-content: flex-end">
+            <button type="submit" class="btn btn-primary" :disabled="busy">{{ busy ? 'Lettura da Airtable…' : 'Leggi da Airtable' }}</button>
+          </div>
+        </form>
       </template>
 
       <!-- 2. Abbinamento colonne, prova e importazione -->
@@ -232,6 +302,11 @@ async function importAll() {
             </select>
           </div>
         </div>
+
+        <label v-if="unmapped.length" class="checkbox">
+          <input v-model="extraToNotes" type="checkbox" @change="check = null" />
+          Aggiungi alle note le colonne non abbinate ({{ unmapped.join(', ') }})
+        </label>
 
         <div v-if="mappedFields.length" class="preview">
           <h3 class="map-title">Anteprima delle prime righe</h3>
@@ -292,6 +367,7 @@ async function importAll() {
 
 <style scoped>
 .drop { display: flex; align-items: center; justify-content: center; text-align: center; min-height: 140px; border: 2px dashed #c7cdd6; border-radius: var(--radius); cursor: pointer; position: relative; padding: 16px; }
+.airtable { border-top: 1px solid var(--border); padding-top: 8px; }
 .drop:hover { background: #f8f9fb; }
 .drop input { position: absolute; inset: 0; opacity: 0; cursor: pointer; }
 .map-grid { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 8px 16px; }

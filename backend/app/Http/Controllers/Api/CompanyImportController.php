@@ -191,7 +191,24 @@ class CompanyImportController extends Controller
             $row['website'] = 'https://'.$row['website'];
         }
         if (! empty($row['email'])) {
-            $row['email'] = Str::lower($row['email']);
+            $row['email'] = Str::lower(trim($row['email']));
+            // Email non valida: non blocca la riga, resta leggibile nelle note.
+            if (! filter_var($row['email'], FILTER_VALIDATE_EMAIL)) {
+                $row['notes'] = trim(($row['notes'] ?? '')."\nEmail (non valida): {$row['email']}");
+                $row['email'] = null;
+            }
+        }
+        // Più città (es. record collegati di Airtable): tengo la prima, l'elenco completo va nelle note.
+        if (! empty($row['city']) && mb_strlen($row['city']) > 100) {
+            $row['notes'] = trim(($row['notes'] ?? '')."\nCittà: {$row['city']}");
+            $row['city'] = Str::limit(trim(explode(',', $row['city'])[0]), 100, '');
+        }
+        if (! empty($row['phone']) && mb_strlen($row['phone']) > 40) {
+            $row['notes'] = trim(($row['notes'] ?? '')."\nTelefono: {$row['phone']}");
+            $row['phone'] = null;
+        }
+        if (! empty($row['notes'])) {
+            $row['notes'] = Str::limit($row['notes'], 5000, '');
         }
         if (! empty($row['owner_email'])) {
             $row['owner_email'] = Str::lower($row['owner_email']);

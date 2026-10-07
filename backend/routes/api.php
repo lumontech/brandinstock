@@ -1,6 +1,7 @@
 <?php
 
 use App\Http\Controllers\Api\ActivityController;
+use App\Http\Controllers\Api\AirtableRecordsController;
 use App\Http\Controllers\Api\AuditLogController;
 use App\Http\Controllers\Api\AuthController;
 use App\Http\Controllers\Api\CompanyBulkController;
@@ -39,6 +40,7 @@ Route::middleware(['auth:sanctum', 'active', 'two-factor', 'throttle:api'])->gro
 
     Route::post('companies/import', CompanyImportController::class)->middleware('throttle:import');
     Route::post('companies/bulk', CompanyBulkController::class)->middleware('throttle:import');
+    Route::post('airtable/records', AirtableRecordsController::class)->middleware('throttle:sensitive');
     Route::apiResource('companies', CompanyController::class);
     Route::apiResource('contacts', ContactController::class);
     Route::apiResource('deals', DealController::class);
