@@ -1,17 +1,18 @@
 <script setup lang="ts">
 import { onMounted, reactive, ref, watch } from 'vue'
 import AppModal from './AppModal.vue'
+import CompanyPicker from './CompanyPicker.vue'
 import { errorMessage, http } from '@/api/http'
 import { useLookups } from '@/composables/useLookups'
 import { useAuthStore } from '@/stores/auth'
 import { dealSources } from '@/utils/format'
-import type { Company, Contact, Deal } from '@/types'
+import type { Contact, Deal } from '@/types'
 
 const props = defineProps<{ deal?: Deal | null; companyId?: number; stageId?: number }>()
 const emit = defineEmits<{ close: []; saved: [deal: Deal] }>()
 
 const auth = useAuthStore()
-const { stages, users, loadStages, loadUsers, searchCompanies, companyContacts } = useLookups()
+const { stages, users, loadStages, loadUsers, companyContacts } = useLookups()
 
 const form = reactive({
   title: props.deal?.title ?? '',
@@ -28,23 +29,14 @@ const form = reactive({
   owner_id: props.deal?.owner?.id ?? null as number | null,
 })
 
-const companies = ref<Company[]>([])
 const contacts = ref<Contact[]>([])
-const companyQuery = ref(props.deal?.company?.name ?? '')
 const error = ref('')
 const saving = ref(false)
 
 onMounted(async () => {
   await loadStages()
   if (auth.seesEverything) await loadUsers()
-  companies.value = await searchCompanies('')
   if (form.company_id) contacts.value = await companyContacts(form.company_id)
-})
-
-let timer: number | undefined
-watch(companyQuery, (q) => {
-  clearTimeout(timer)
-  timer = window.setTimeout(async () => (companies.value = await searchCompanies(q)), 250)
 })
 
 watch(() => form.company_id, async (id, old) => {
@@ -53,6 +45,10 @@ watch(() => form.company_id, async (id, old) => {
 })
 
 async function submit() {
+  if (!form.company_id) {
+    error.value = 'Scegli il lead o cliente: scrivi il nome e selezionalo dai risultati.'
+    return
+  }
   saving.value = true
   error.value = ''
   const payload = { ...form, expected_close_date: form.expected_close_date || null, source: form.source || null }
@@ -80,12 +76,7 @@ async function submit() {
         </div>
         <div class="field">
           <label for="deal-company-search">Lead / Cliente *</label>
-          <input id="deal-company-search" v-model="companyQuery" class="input" placeholder="Cerca lead o cliente…" />
-          <select v-model="form.company_id" class="input" required aria-label="Cliente">
-            <option :value="null" disabled>Seleziona…</option>
-            <option v-if="deal?.company && !companies.some((c) => c.id === deal?.company_id)" :value="deal.company_id">{{ deal.company.name }}</option>
-            <option v-for="c in companies" :key="c.id" :value="c.id">{{ c.name }}</option>
-          </select>
+          <CompanyPicker v-model="form.company_id" input-id="deal-company-search" :initial-name="deal?.company?.name" />
         </div>
         <div class="field">
           <label for="deal-contact">Referente</label>

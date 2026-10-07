@@ -1,6 +1,6 @@
 import { ref } from 'vue'
 import { http } from '@/api/http'
-import type { Company, Contact, Paginated, Ref, Stage } from '@/types'
+import type { Contact, Paginated, Ref, Stage } from '@/types'
 
 /** Liste di supporto per select e filtri (caricate su richiesta, in cache per la sessione). */
 const stages = ref<Stage[]>([])
@@ -21,13 +21,9 @@ export function useLookups() {
     return users.value
   }
 
-  async function searchCompanies(q: string) {
-    return (await http.get<Paginated<Company>>('/companies', { params: { q } })).data.data
-  }
-
   async function companyContacts(companyId: number) {
     return (await http.get<Paginated<Contact>>('/contacts', { params: { company_id: companyId } })).data.data
   }
 
-  return { stages, users, loadStages, loadUsers, searchCompanies, companyContacts }
+  return { stages, users, loadStages, loadUsers, companyContacts }
 }
