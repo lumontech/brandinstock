@@ -2,7 +2,9 @@
 
 namespace Tests\Feature;
 
+use App\Models\Activity;
 use App\Models\Company;
+use App\Models\Contact;
 use App\Models\Deal;
 use App\Models\User;
 use Tests\TestCase;
@@ -69,6 +71,38 @@ class CompanyBulkTest extends TestCase
 
         $this->assertSame(1, Company::count());
         $this->assertSame(2, Company::onlyTrashed()->count());
+    }
+
+    public function test_bulk_delete_with_deals_removes_everything_linked(): void
+    {
+        $manager = $this->manager();
+        $company = Company::factory()->for($manager, 'owner')->create();
+        $deal = Deal::factory()->for($company)->for($manager, 'owner')->create();
+        Contact::factory()->for($company)->for($manager, 'owner')->create();
+        $this->actingAs($manager)->postJson('/api/activities', ['type' => 'note', 'subject' => 'Chiamata', 'deal_id' => $deal->id])->assertCreated();
+
+        $this->actingAs($manager)->postJson('/api/companies/bulk', [
+            'ids' => [$company->id],
+            'action' => 'delete',
+            'with_deals' => true,
+        ])->assertOk()->assertJson(['processed' => 1, 'skipped_with_deals' => 0, 'deals_deleted' => 1]);
+
+        $this->assertSame(0, Company::count());
+        $this->assertSame(0, Deal::count());
+        $this->assertSame(0, $company->contacts()->count());
+        $this->assertSame(0, Activity::count());
+        $this->assertSame(1, Deal::onlyTrashed()->count());
+    }
+
+    public function test_single_delete_removes_record_with_deals(): void
+    {
+        $manager = $this->manager();
+        $company = Company::factory()->for($manager, 'owner')->create();
+        Deal::factory()->for($company)->for($manager, 'owner')->create();
+
+        $this->actingAs($manager)->deleteJson("/api/companies/{$company->id}")->assertNoContent();
+        $this->assertSame(0, Company::count());
+        $this->assertSame(0, Deal::count());
     }
 
     public function test_manager_can_reassign_in_bulk(): void

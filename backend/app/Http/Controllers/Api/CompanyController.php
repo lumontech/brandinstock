@@ -13,6 +13,7 @@ use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
 use Illuminate\Http\Resources\Json\AnonymousResourceCollection;
 use Illuminate\Support\Arr;
+use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Gate;
 use Illuminate\Validation\Rule;
 
@@ -120,10 +121,7 @@ class CompanyController extends Controller
     public function destroy(Company $company): JsonResponse
     {
         Gate::authorize('delete', $company);
-        if ($company->deals()->exists()) {
-            return response()->json(['message' => "Impossibile eliminare un'azienda con opportunità collegate."], 422);
-        }
-        $company->delete();
+        DB::transaction(fn () => $company->deleteWithRelated());
 
         return response()->json(null, 204);
     }

@@ -340,15 +340,19 @@ function clearSelection() {
   confirmingDelete.value = false
 }
 
-interface BulkResult { processed: number; skipped: number; skipped_with_deals: number }
+interface BulkResult { processed: number; skipped: number; skipped_with_deals: number; deals_deleted?: number }
+
+// Quante delle righe selezionate hanno opportunità (verranno eliminate insieme al record).
+const selectedDeals = computed(() => rows.value.filter((r) => selected.value.has(r.id)).reduce((t, r) => t + (r.deals_count ?? 0), 0))
 
 async function runBulk(action: 'update' | 'delete', changes?: Record<string, string | number | null>) {
   bulkBusy.value = true
   error.value = ''
   notice.value = ''
   try {
-    const { data } = await http.post<BulkResult>('/companies/bulk', { ids: [...selected.value], action, changes })
+    const { data } = await http.post<BulkResult>('/companies/bulk', { ids: [...selected.value], action, changes, with_deals: action === 'delete' ? true : undefined })
     const parts = [`${data.processed} ${action === 'delete' ? 'eliminati' : 'aggiornati'}`]
+    if (data.deals_deleted) parts.push(`${data.deals_deleted} opportunità eliminate`)
     if (data.skipped_with_deals) parts.push(`${data.skipped_with_deals} non eliminati perché hanno opportunità collegate`)
     if (data.skipped) parts.push(`${data.skipped} non accessibili`)
     notice.value = parts.join(' · ')
@@ -427,7 +431,10 @@ const isEditing = (row: Company, col: Column) => editing.value?.id === row.id &&
         <button class="btn btn-sm" :disabled="bulkBusy" @click="clearSelection">Annulla selezione</button>
       </template>
       <template v-else>
-        <span>Eliminare {{ selected.size }} record? Quelli con opportunità collegate verranno mantenuti.</span>
+        <span>
+          Eliminare {{ selected.size }} record?
+          <template v-if="selectedDeals">Verranno eliminate anche <strong>{{ selectedDeals }} opportunità</strong> collegate, con referenti e attività.</template>
+        </span>
         <button class="btn btn-sm btn-danger" :disabled="bulkBusy" @click="runBulk('delete')">Sì, elimina</button>
         <button class="btn btn-sm" :disabled="bulkBusy" @click="confirmingDelete = false">No</button>
       </template>

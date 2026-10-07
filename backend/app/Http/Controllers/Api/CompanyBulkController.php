@@ -26,6 +26,8 @@ class CompanyBulkController extends Controller
             'ids' => ['required', 'array', 'min:1', 'max:1000'],
             'ids.*' => ['integer', 'distinct'],
             'action' => ['required', Rule::in(['update', 'delete'])],
+            // Eliminazione: se vero elimina anche i record con opportunità, insieme alle opportunità.
+            'with_deals' => ['sometimes', 'boolean'],
             'changes' => ['required_if:action,update', 'array'],
             'changes.segment' => ['sometimes', Rule::in(Company::SEGMENTS)],
             'changes.source' => ['sometimes', 'nullable', Rule::in(LeadSource::ALL)],
@@ -43,18 +45,17 @@ class CompanyBulkController extends Controller
 
         // Solo i record visibili all'utente: gli ID di altri venditori vengono ignorati.
         $companies = Company::query()->visibleTo($user)->whereKey($data['ids'])->withCount('deals')->get();
-        $result = ['processed' => 0, 'skipped' => count($data['ids']) - $companies->count(), 'skipped_with_deals' => 0];
+        $result = ['processed' => 0, 'skipped' => count($data['ids']) - $companies->count(), 'skipped_with_deals' => 0, 'deals_deleted' => 0];
 
         DB::transaction(function () use ($companies, $data, &$result) {
             foreach ($companies as $company) {
                 if ($data['action'] === 'delete') {
-                    // Come per l'eliminazione singola: i record con opportunità restano.
-                    if ($company->deals_count > 0) {
+                    if ($company->deals_count > 0 && ! ($data['with_deals'] ?? false)) {
                         $result['skipped_with_deals']++;
 
                         continue;
                     }
-                    $company->delete();
+                    $result['deals_deleted'] += $company->deleteWithRelated();
                 } else {
                     $changes = $data['changes'];
                     $company->fill(array_intersect_key($changes, array_flip(['segment', 'source', 'type'])));

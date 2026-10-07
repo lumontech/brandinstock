@@ -31,7 +31,7 @@ async function load() {
 }
 
 async function remove() {
-  if (!company.value || !window.confirm('Eliminare questo cliente?')) return
+  if (!company.value || !window.confirm('Eliminare questo record? Verranno eliminate anche le sue opportunità, i referenti e le attività.')) return
   try {
     await http.delete(`/companies/${company.value.id}`)
     await router.push({ name: company.value.status === 'customer' ? 'companies' : 'leads' })

@@ -66,6 +66,26 @@ class Company extends Model
             && (filled($this->sdi_code) || filled($this->pec));
     }
 
+    /**
+     * Elimina il record con tutto ciò che gli è collegato: opportunità, referenti e attività.
+     * Ogni modello passa dal proprio delete(), così ogni eliminazione resta nel registro di audit.
+     * Da chiamare dentro una transazione. Restituisce il numero di opportunità eliminate.
+     */
+    public function deleteWithRelated(): int
+    {
+        $deals = $this->deals()->get();
+        Activity::query()
+            ->where('company_id', $this->id)
+            ->orWhereIn('deal_id', $deals->modelKeys())
+            ->get()
+            ->each->delete();
+        $deals->each->delete();
+        $this->contacts()->get()->each->delete();
+        $this->delete();
+
+        return $deals->count();
+    }
+
     /** Il lead diventa cliente (chiamato quando si vince un'opportunità). */
     public function markAsCustomer(): void
     {
