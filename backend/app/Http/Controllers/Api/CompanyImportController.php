@@ -140,7 +140,12 @@ class CompanyImportController extends Controller
         $row = [];
         foreach ($raw as $key => $value) {
             if (is_string($key) && (is_scalar($value) || $value === null)) {
-                $value = is_string($value) ? trim(preg_replace('/\s+/u', ' ', $value)) : $value;
+                if (is_string($value)) {
+                    // Le note mantengono gli a capo (una informazione per riga), gli altri campi no.
+                    $value = in_array($key, ['notes', 'billing_notes'], true)
+                        ? trim(preg_replace(['/[^\S\n]+/u', '/ *\n */u', '/\n{3,}/u'], [' ', "\n", "\n\n"], str_replace("\r", '', $value)))
+                        : trim(preg_replace('/\s+/u', ' ', $value));
+                }
                 // Celle vuote o segnaposto tipici degli export ("-", "N/A", "n.d.", "?", "0").
                 $row[$key] = ($value === '' || (is_string($value) && preg_match('/^(-+|n\/?a|n\.?d\.?|none|null|nessun[oa]?|\?+|0)$/iu', $value))) ? null : $value;
             }

@@ -93,4 +93,29 @@ class LeadStatusTest extends TestCase
         $this->assertNull($b->fresh()->contact_person);
         $this->assertSame('Lucia Bianchi', $c->fresh()->contact_person);
     }
+
+    public function test_flattened_import_notes_are_repaired(): void
+    {
+        $user = User::factory()->create();
+        $flat = 'Chiamato a giugno Nome e Cognome: Sokol Barjami Stato: In attesa Disponibilià economica: si Hai altri negozi?: no Creato: Stef Brandinstock Data creazione: 30/6/2026';
+        $lead = Company::factory()->for($user, 'owner')->create(['notes' => $flat, 'contact_person' => 'Sokol Barjami Stato: In attesa', 'lead_status' => null]);
+        $plain = Company::factory()->for($user, 'owner')->create(['notes' => 'Cliente simpatico', 'lead_status' => null]);
+
+        (require database_path('migrations/2026_10_07_140000_repair_flattened_import_notes.php'))->up();
+
+        $lead->refresh();
+        $this->assertSame('in_attesa', $lead->lead_status);
+        $this->assertSame('Sokol Barjami', $lead->contact_person);
+        $this->assertSame("Chiamato a giugno\nNome e Cognome: Sokol Barjami\nStato: In attesa\nDisponibilià economica: si\nHai altri negozi?: no\nData creazione: 30/6/2026", $lead->notes);
+        $this->assertSame('Cliente simpatico', $plain->fresh()->notes);
+    }
+
+    public function test_import_keeps_line_breaks_in_notes(): void
+    {
+        $user = User::factory()->create();
+        $this->actingAs($user)->postJson('/api/companies/import', ['duplicates' => 'skip', 'rows' => [
+            ['name' => 'Uno', 'notes' => "Nome e Cognome: Ada Rossi\nStato:   Prospect"],
+        ]])->assertOk();
+        $this->assertSame("Nome e Cognome: Ada Rossi\nStato: Prospect", Company::first()->notes);
+    }
 }
